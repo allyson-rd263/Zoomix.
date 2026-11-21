@@ -142,7 +142,7 @@ private fun openGallery(ctx: Context, media: Media?): Boolean {
         true
     } catch (e: Exception) {
         try {
-            ctx.startActivity(Intent.makeMainSelector(Intent.ACTION_MAIN, Intent.CATEGORY_APP_GALLERY))
+            ctx.startActivity(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_GALLERY))
             true
         } catch (e2: Exception) {
             false

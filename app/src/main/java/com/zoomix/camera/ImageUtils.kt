@@ -169,7 +169,7 @@ object ImageUtils {
                 ExifInterface.TAG_DATETIME, ExifInterface.TAG_DATETIME_ORIGINAL,
                 ExifInterface.TAG_MAKE, ExifInterface.TAG_MODEL,
                 ExifInterface.TAG_EXPOSURE_TIME, ExifInterface.TAG_F_NUMBER,
-                ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, ExifInterface.TAG_FOCAL_LENGTH
+                "PhotographicSensitivity", ExifInterface.TAG_FOCAL_LENGTH
             )
             tags.forEach { t -> from.getAttribute(t)?.let { to.setAttribute(t, it) } }
             to.saveAttributes()
