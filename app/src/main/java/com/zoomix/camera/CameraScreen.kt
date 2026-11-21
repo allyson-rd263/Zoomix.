@@ -189,7 +189,6 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 )
                 .build()
             val b = VideoCapture.Builder(recorder)
-            if (stabilize) b.setVideoStabilizationEnabled(true)
             return b.build()
         }
 
