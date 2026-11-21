@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Baixar codigo
         uses: actions/checkout@v4
@@ -27,11 +28,14 @@ jobs:
           gradle-version: '8.2'
 
       - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
 
       - name: Instalar SDK Android 34
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
+          yes | sdkmanager --licenses
           sdkmanager 'platform-tools' 'platforms;android-34' 'build-tools;34.0.0'
 
       - name: Compilar APK de teste
