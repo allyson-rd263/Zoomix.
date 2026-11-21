@@ -51,8 +51,8 @@ object SecureStore {
         prefs(ctx).edit().putString("key_${p.name}", key.trim()).apply()
     }
 
-    /** Por padrão a original é mantida (ligado) até a IA ser validada nos seus testes. */
-    fun keepOriginal(ctx: Context): Boolean = prefs(ctx).getBoolean("keep_original", true)
+    /** Por padrão a original é descartada depois que a melhorada é salva. */
+    fun keepOriginal(ctx: Context): Boolean = prefs(ctx).getBoolean("keep_original", false)
 
     fun setKeepOriginal(ctx: Context, v: Boolean) {
         prefs(ctx).edit().putBoolean("keep_original", v).apply()
@@ -63,5 +63,31 @@ object SecureStore {
 
     fun setGlassMode(ctx: Context, v: String) {
         prefs(ctx).edit().putString("glass_mode", v).apply()
+    }
+
+    /** "max" (até 4K), "fhd" ou "hd". */
+    fun videoQuality(ctx: Context): String = prefs(ctx).getString("video_quality", "max") ?: "max"
+
+    fun setVideoQuality(ctx: Context, v: String) {
+        prefs(ctx).edit().putString("video_quality", v).apply()
+    }
+
+    fun micOn(ctx: Context): Boolean = prefs(ctx).getBoolean("mic_on", true)
+
+    fun setMicOn(ctx: Context, v: Boolean) {
+        prefs(ctx).edit().putBoolean("mic_on", v).apply()
+    }
+
+    fun horizon(ctx: Context): Boolean = prefs(ctx).getBoolean("horizon", false)
+
+    fun setHorizon(ctx: Context, v: Boolean) {
+        prefs(ctx).edit().putBoolean("horizon", v).apply()
+    }
+
+    /** Resultado da última tentativa de melhorar uma foto (para diagnóstico). */
+    fun lastAi(ctx: Context): String = prefs(ctx).getString("last_ai", "") ?: ""
+
+    fun setLastAi(ctx: Context, v: String) {
+        prefs(ctx).edit().putString("last_ai", v).apply()
     }
 }

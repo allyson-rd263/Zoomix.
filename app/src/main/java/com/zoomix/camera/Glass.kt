@@ -26,6 +26,8 @@ object GlassConfig {
         else -> if (isWeakDevice(ctx)) GlassTier.LEVE else GlassTier.COMPLETO
     }
 
+    fun isStrong(ctx: Context): Boolean = !isWeakDevice(ctx)
+
     private fun isWeakDevice(ctx: Context): Boolean {
         val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         return am.isLowRamDevice || Build.VERSION.SDK_INT < 31 || am.memoryClass < 192

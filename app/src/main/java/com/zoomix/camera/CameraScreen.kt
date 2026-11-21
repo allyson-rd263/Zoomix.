@@ -1,34 +1,48 @@
 package com.zoomix.camera
 
+import android.Manifest
+import android.content.ContentValues
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
-import androidx.camera.core.resolutionselector.AspectRatioStrategy
-import androidx.camera.core.resolutionselector.ResolutionSelector
-import androidx.camera.core.resolutionselector.ResolutionStrategy
-import androidx.camera.extensions.ExtensionMode
-import androidx.camera.extensions.ExtensionsManager
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.MediaStoreOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -45,14 +59,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -62,21 +74,42 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import kotlinx.coroutines.delay
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.roundToInt
 
-private const val MAX_ZOOM = 50f
+private const val PHOTO_MAX_ZOOM = 50f
+private const val VIDEO_MAX_ZOOM = 10f
+private const val LIVE_CLIP_MS = 2500L
 
-/** Modos que só aparecem se o fabricante do aparelho oferecer (CameraX Extensions). */
-private enum class CamMode(val label: String, val ext: Int) {
-    PADRAO("Padrão", ExtensionMode.NONE),
-    HDR("HDR", ExtensionMode.HDR),
-    NOITE("Noite", ExtensionMode.NIGHT)
+private enum class Cam(val label: String) {
+    FOTO("Foto"),
+    LIVE("Live"),
+    VIDEO("Vídeo")
+}
+
+private fun stamp(): String =
+    SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+
+/** Coloca a foto na fila da IA. Devolve true se há chave configurada (e, portanto, vai para a IA). */
+private fun enqueueEnhance(ctx: Context, file: File): Boolean {
+    val hasKey = !SecureStore.apiKey(ctx, SecureStore.provider(ctx)).isNullOrBlank()
+    val builder = OneTimeWorkRequestBuilder<EnhanceWorker>()
+        .setInputData(workDataOf(EnhanceWorker.KEY_PATH to file.absolutePath))
+        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+    if (hasKey) {
+        builder.setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+    }
+    WorkManager.getInstance(ctx).enqueue(builder.build())
+    return hasKey
 }
 
 @Composable
@@ -85,98 +118,123 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val mainExecutor = remember { ContextCompat.getMainExecutor(ctx) }
     val tier = remember { GlassConfig.resolve(ctx, SecureStore.glassMode(ctx)) }
+    val strong = remember { GlassConfig.isStrong(ctx) }
 
-    // FIT_CENTER + prévia em 4:3: a prévia mostra exatamente o enquadramento da foto (sem cortes
-    // escondidos) e o sensor é aproveitado por inteiro. COMPATIBLE para o zoom digital escalar bem.
-    val previewView = remember {
-        PreviewView(ctx).apply {
-            scaleType = PreviewView.ScaleType.FIT_CENTER
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-        }
-    }
+    val previewView = remember { PreviewView(ctx).apply { keepScreenOn = true } }
     val ioExecutor = remember { Executors.newSingleThreadExecutor() }
+    val workExecutor = remember { Executors.newSingleThreadExecutor() }
 
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
-    var extManager by remember { mutableStateOf<ExtensionsManager?>(null) }
-    var available by remember { mutableStateOf(listOf(CamMode.PADRAO)) }
-    var mode by remember { mutableStateOf(CamMode.PADRAO) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
+    var cam by remember { mutableStateOf(Cam.FOTO) }
     var zoomT by remember { mutableStateOf(0f) }
     var status by remember { mutableStateOf("") }
-    var tapPos by remember { mutableStateOf<Offset?>(null) }
+    var recording by remember { mutableStateOf<Recording?>(null) }
+    var recSeconds by remember { mutableStateOf(0) }
+    var liveBusy by remember { mutableStateOf(false) }
+    var horizonOn by remember { mutableStateOf(SecureStore.horizon(ctx)) }
+    val tilt by rememberTilt(horizonOn && cam == Cam.FOTO)
+    var audioGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val audioLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { audioGranted = it }
 
     DisposableEffect(Unit) {
-        val pf = ProcessCameraProvider.getInstance(ctx)
-        pf.addListener({
-            val p = pf.get()
-            provider = p
-            val ef = ExtensionsManager.getInstanceAsync(ctx, p)
-            ef.addListener({
-                try {
-                    val m = ef.get()
-                    extManager = m
-                    available = CamMode.values().filter {
-                        it == CamMode.PADRAO ||
-                            m.isExtensionAvailable(CameraSelector.DEFAULT_BACK_CAMERA, it.ext)
-                    }
-                } catch (_: Exception) {
-                }
-            }, mainExecutor)
-        }, mainExecutor)
+        val future = ProcessCameraProvider.getInstance(ctx)
+        future.addListener({ provider = future.get() }, mainExecutor)
         onDispose {
             try {
-                provider?.unbindAll()
+                if (future.isDone) future.get().unbindAll()
             } catch (_: Exception) {
             }
         }
     }
 
-    LaunchedEffect(provider, extManager, mode) {
+    // Liga os casos de uso de cada modo: Foto = prévia + foto; Live = prévia + foto + vídeo;
+    // Vídeo = prévia + vídeo. Se o aparelho não aguentar o modo, volta para Foto.
+    LaunchedEffect(provider, cam) {
         val p = provider ?: return@LaunchedEffect
+        recording?.stop()
+        recording = null
+        val selector = CameraSelector.DEFAULT_BACK_CAMERA
 
-        fun bind(m: CamMode, highRes: Boolean) {
-            val aspect = AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
-            val previewSel = ResolutionSelector.Builder().setAspectRatioStrategy(aspect).build()
-            val capSel = ResolutionSelector.Builder()
-                .setAspectRatioStrategy(aspect)
-                .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
-            if (highRes) {
-                capSel.setAllowedResolutionMode(ResolutionSelector.PREFER_HIGHER_RESOLUTION_OVER_CAPTURE_RATE)
-            }
-            val preview = Preview.Builder().setResolutionSelector(previewSel).build()
-                .also { it.setSurfaceProvider(previewView.surfaceProvider) }
-            val capture = ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                .setResolutionSelector(capSel.build())
-                .build()
-            val em = extManager
-            val selector = if (m == CamMode.PADRAO || em == null) {
-                CameraSelector.DEFAULT_BACK_CAMERA
+        fun newPreview() = Preview.Builder().build().also {
+            it.setSurfaceProvider(previewView.surfaceProvider)
+        }
+
+        fun newPhoto() = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            .build()
+
+        fun newVideo(live: Boolean, stabilize: Boolean): VideoCapture<Recorder> {
+            val order = if (live) {
+                listOf(Quality.FHD, Quality.HD, Quality.SD)
             } else {
-                em.getExtensionEnabledCameraSelector(CameraSelector.DEFAULT_BACK_CAMERA, m.ext)
+                when (SecureStore.videoQuality(ctx)) {
+                    "hd" -> listOf(Quality.HD, Quality.SD)
+                    "fhd" -> listOf(Quality.FHD, Quality.HD, Quality.SD)
+                    else -> listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD)
+                }
             }
-            p.unbindAll()
-            camera = p.bindToLifecycle(lifecycleOwner, selector, preview, capture)
-            imageCapture = capture
+            val recorder = Recorder.Builder()
+                .setQualitySelector(
+                    QualitySelector.fromOrderedList(order, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD))
+                )
+                .build()
+            val b = VideoCapture.Builder(recorder)
+            if (stabilize) b.setVideoStabilizationEnabled(true)
+            return b.build()
         }
 
         try {
-            bind(mode, highRes = true)
-        } catch (e: Exception) {
-            try {
-                bind(mode, highRes = false)
-            } catch (e2: Exception) {
-                status = "Modo ${mode.label} indisponível neste aparelho"
-                if (mode != CamMode.PADRAO) mode = CamMode.PADRAO
+            p.unbindAll()
+            when (cam) {
+                Cam.FOTO -> {
+                    val ic = newPhoto()
+                    camera = p.bindToLifecycle(lifecycleOwner, selector, newPreview(), ic)
+                    imageCapture = ic
+                    videoCapture = null
+                }
+                Cam.LIVE -> {
+                    val ic = newPhoto()
+                    val vc = newVideo(live = true, stabilize = false)
+                    camera = p.bindToLifecycle(lifecycleOwner, selector, newPreview(), ic, vc)
+                    imageCapture = ic
+                    videoCapture = vc
+                }
+                Cam.VIDEO -> {
+                    val vc = try {
+                        newVideo(live = false, stabilize = true).also {
+                            camera = p.bindToLifecycle(lifecycleOwner, selector, newPreview(), it)
+                        }
+                    } catch (e: Exception) {
+                        p.unbindAll()
+                        newVideo(live = false, stabilize = false).also {
+                            camera = p.bindToLifecycle(lifecycleOwner, selector, newPreview(), it)
+                        }
+                    }
+                    imageCapture = null
+                    videoCapture = vc
+                }
             }
+        } catch (e: Exception) {
+            status = "O modo ${cam.label} não está disponível neste aparelho"
+            if (cam != Cam.FOTO) cam = Cam.FOTO
         }
     }
 
-    // Zoom de 1x a 50x em escala logarítmica. Até o limite do hardware o zoom é da câmera;
-    // acima disso vira zoom digital (ampliação/recorte).
+    // Zoom em escala logarítmica. Foto: até 50x (acima do limite do hardware vira zoom digital).
+    // Live e Vídeo: só zoom óptico, no máximo 10x, para vídeo e foto ficarem iguais e sem borrar.
     val hwMax = (camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f).coerceAtLeast(1f)
-    val userZoom = MAX_ZOOM.pow(zoomT)
+    val maxZoom = if (cam == Cam.FOTO) PHOTO_MAX_ZOOM else min(hwMax, VIDEO_MAX_ZOOM)
+    val userZoom = maxZoom.pow(zoomT)
     val hwZoom = min(userZoom, hwMax)
     val digital = userZoom / hwZoom
 
@@ -184,48 +242,24 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         camera?.cameraControl?.setZoomRatio(hwZoom)
     }
 
-    // Compensação de exposição (só se o aparelho suportar).
-    val expState = camera?.cameraInfo?.exposureState
-    val evRange = expState?.exposureCompensationRange
-    val evSupported = expState?.isExposureCompensationSupported == true &&
-        evRange != null && evRange.lower < evRange.upper
-    val evStep = expState?.exposureCompensationStep?.toFloat() ?: 0f
-    var evIndex by remember(camera) { mutableStateOf(0) }
-
-    fun capture() {
+    fun takePhoto() {
         val cap = imageCapture ?: return
         val dir = File(ctx.cacheDir, "pending").apply { mkdirs() }
-        val name = "IMG_" + java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-            .format(java.util.Date())
-        val file = File(dir, "$name.jpg")
+        val file = File(dir, "IMG_${stamp()}.jpg")
         val extra = digital
-        // Com zoom digital, a captura inteira do sensor fica guardada intacta em "_full".
-        val raw = if (extra > 1.01f) File(dir, "${name}_full.jpg") else file
+        val roll = if (horizonOn && abs(tilt) in 0.5f..30f) tilt else 0f
         status = "Tirando foto…"
         cap.takePicture(
-            ImageCapture.OutputFileOptions.Builder(raw).build(),
+            ImageCapture.OutputFileOptions.Builder(file).build(),
             ioExecutor,
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                     try {
-                        val (w, h) = ImageUtils.sizeOf(raw)
-                        val sensor = CameraDiag.sensorPixels(ctx)
-                        if (raw != file) ImageUtils.applyDigitalCrop(raw, file, extra)
-                        val hasKey = !SecureStore.apiKey(ctx, SecureStore.provider(ctx)).isNullOrBlank()
-                        val builder = OneTimeWorkRequestBuilder<EnhanceWorker>()
-                            .setInputData(workDataOf(EnhanceWorker.KEY_PATH to file.absolutePath))
-                            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-                        if (hasKey) {
-                            builder.setConstraints(
-                                Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-                            )
-                        }
-                        WorkManager.getInstance(ctx).enqueue(builder.build())
-                        val info = String.format(java.util.Locale.US, "Captura %dx%d (%.1f MP)", w, h, w * h / 1e6) +
-                            (sensor?.let { " · sensor ${it.first}x${it.second}" } ?: "")
+                        if (extra > 1.01f || roll != 0f) ImageUtils.processStill(file, extra, roll)
+                        val hasKey = enqueueEnhance(ctx, file)
                         mainExecutor.execute {
-                            status = info + if (hasKey) "\nMelhorando com IA em segundo plano…"
-                            else "\nSem chave de IA: salva sem melhoria."
+                            status = if (hasKey) "Foto na fila: melhorando com IA…"
+                            else "Foto salva (sem chave de IA configurada)"
                         }
                     } catch (e: Exception) {
                         mainExecutor.execute { status = "Erro ao processar a foto: ${e.message}" }
@@ -239,6 +273,113 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         )
     }
 
+    // Live: foto + clipe de ~2,5 s gravado a partir do clique, juntados em uma Motion Photo.
+    fun takeLive() {
+        val cap = imageCapture ?: return
+        val vc = videoCapture ?: return
+        if (liveBusy) return
+        liveBusy = true
+        val dir = File(ctx.cacheDir, "pending").apply { mkdirs() }
+        val name = "LIVE_${stamp()}"
+        val still = File(dir, "$name.jpg")
+        val clip = File(dir, "$name.mp4")
+        val stillDone = CountDownLatch(1)
+        val stillOk = AtomicBoolean(false)
+        status = "Gravando Live…"
+
+        val rec = vc.output
+            .prepareRecording(ctx, FileOutputOptions.Builder(clip).build())
+            .start(mainExecutor) { ev ->
+                if (ev is VideoRecordEvent.Finalize) {
+                    val failed = ev.hasError()
+                    workExecutor.execute {
+                        try {
+                            stillDone.await(10, TimeUnit.SECONDS)
+                            if (failed || !stillOk.get()) {
+                                mainExecutor.execute { status = "Não foi possível gravar a Live" }
+                            } else {
+                                val motion = MotionPhoto.build(still.readBytes(), clip.readBytes())
+                                Gallery.saveJpeg(ctx, motion, "ZOOMIX_$name")
+                                mainExecutor.execute { status = "Live salva na galeria" }
+                            }
+                        } catch (e: Exception) {
+                            mainExecutor.execute { status = "Erro ao salvar a Live: ${e.message}" }
+                        } finally {
+                            still.delete()
+                            clip.delete()
+                            mainExecutor.execute { liveBusy = false }
+                        }
+                    }
+                }
+            }
+
+        cap.takePicture(
+            ImageCapture.OutputFileOptions.Builder(still).build(),
+            ioExecutor,
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    stillOk.set(true)
+                    stillDone.countDown()
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    stillDone.countDown()
+                }
+            }
+        )
+        Handler(Looper.getMainLooper()).postDelayed({ rec.stop() }, LIVE_CLIP_MS)
+    }
+
+    fun toggleRecording() {
+        val vc = videoCapture ?: return
+        val current = recording
+        if (current != null) {
+            current.stop()
+            return
+        }
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, "ZOOMIX_VID_${stamp()}")
+            if (Build.VERSION.SDK_INT >= 29) {
+                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/Zoomix")
+            }
+        }
+        val options = MediaStoreOutputOptions.Builder(
+            ctx.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        ).setContentValues(values).build()
+        var pending = vc.output.prepareRecording(ctx, options)
+        if (SecureStore.micOn(ctx) && audioGranted) pending = pending.withAudioEnabled()
+        recSeconds = 0
+        status = "Gravando…"
+        recording = pending.start(mainExecutor) { ev ->
+            when (ev) {
+                is VideoRecordEvent.Status ->
+                    recSeconds = (ev.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
+                is VideoRecordEvent.Finalize -> {
+                    recording = null
+                    recSeconds = 0
+                    status = if (ev.hasError()) "Erro ao gravar o vídeo (código ${ev.error})"
+                    else "Vídeo salvo na galeria"
+                }
+                else -> {}
+            }
+        }
+    }
+
+    fun onShutter() {
+        when (cam) {
+            Cam.FOTO -> takePhoto()
+            Cam.LIVE -> takeLive()
+            Cam.VIDEO -> toggleRecording()
+        }
+    }
+
+    fun selectMode(m: Cam) {
+        cam = m
+        if (m == Cam.VIDEO && SecureStore.micOn(ctx) && !audioGranted) {
+            audioLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxSize().clipToBounds()) {
             AndroidView(
@@ -248,37 +389,18 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     scaleY = digital
                 }
             )
-            // Camada transparente que recebe o toque para focar/medir exposição naquele ponto.
+        }
+
+        // Linha de nível do horizon lock: fica reta quando o celular está nivelado.
+        if (horizonOn && cam == Cam.FOTO) {
             Box(
-                Modifier.fillMaxSize().pointerInput(camera, digital) {
-                    detectTapGestures { off ->
-                        val cam = camera ?: return@detectTapGestures
-                        val cx = size.width / 2f
-                        val cy = size.height / 2f
-                        val x = cx + (off.x - cx) / digital
-                        val y = cy + (off.y - cy) / digital
-                        val point = previewView.meteringPointFactory.createPoint(x, y)
-                        val action = FocusMeteringAction.Builder(
-                            point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
-                        ).setAutoCancelDuration(3, TimeUnit.SECONDS).build()
-                        cam.cameraControl.startFocusAndMetering(action)
-                        tapPos = off
-                    }
-                }
+                Modifier
+                    .align(Alignment.Center)
+                    .width(140.dp)
+                    .height(2.dp)
+                    .rotate(-tilt)
+                    .background(if (abs(tilt) < 1f) Color(0xFF4CAF50) else Color.White)
             )
-            val tp = tapPos
-            if (tp != null) {
-                Box(
-                    Modifier
-                        .offset { IntOffset((tp.x - 36.dp.toPx()).roundToInt(), (tp.y - 36.dp.toPx()).roundToInt()) }
-                        .size(72.dp)
-                        .border(2.dp, Color.White, CircleShape)
-                )
-                LaunchedEffect(tp) {
-                    delay(1500)
-                    tapPos = null
-                }
-            }
         }
 
         GlassPanel(
@@ -291,11 +413,13 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("Zoomix", fontWeight = FontWeight.Bold)
-                if (available.size > 1) {
-                    available.forEach { m ->
-                        if (m == mode) Button(onClick = { mode = m }) { Text(m.label) }
-                        else OutlinedButton(onClick = { mode = m }) { Text(m.label) }
+                if (strong && cam == Cam.FOTO) {
+                    val toggle = {
+                        horizonOn = !horizonOn
+                        SecureStore.setHorizon(ctx, horizonOn)
                     }
+                    if (horizonOn) Button(onClick = toggle) { Text("Nível") }
+                    else OutlinedButton(onClick = toggle) { Text("Nível") }
                 }
                 TextButton(onClick = onOpenSettings) { Text("Ajustes") }
             }
@@ -310,30 +434,37 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val label = String.format(java.util.Locale.US, "%.1fx", userZoom) +
+                val label = String.format(Locale.US, "%.1fx", userZoom) +
                     if (digital > 1.01f) "  (digital)" else ""
                 Text(label, fontWeight = FontWeight.SemiBold)
                 Slider(value = zoomT, onValueChange = { zoomT = it }, valueRange = 0f..1f)
-                if (evSupported && evRange != null) {
-                    Text(String.format(java.util.Locale.US, "Exposição %+.1f EV", evIndex * evStep))
-                    Slider(
-                        value = evIndex.toFloat(),
-                        onValueChange = {
-                            evIndex = it.roundToInt()
-                            camera?.cameraControl?.setExposureCompensationIndex(evIndex)
-                        },
-                        valueRange = evRange.lower.toFloat()..evRange.upper.toFloat()
-                    )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Cam.values().forEach { m ->
+                        val enabled = recording == null && !liveBusy
+                        if (m == cam) {
+                            Button(onClick = { selectMode(m) }, enabled = enabled) { Text(m.label) }
+                        } else {
+                            OutlinedButton(onClick = { selectMode(m) }, enabled = enabled) { Text(m.label) }
+                        }
+                    }
                 }
+
+                val recording1 = recording != null
+                val shutterColor = if (cam == Cam.VIDEO) Color(0xFFE53935) else Color.White
+                val shutterShape = if (recording1) RoundedCornerShape(10.dp) else CircleShape
                 Box(
                     Modifier
                         .size(76.dp)
                         .border(3.dp, Color.White, CircleShape)
-                        .padding(6.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .clickable { capture() }
+                        .padding(if (recording1) 20.dp else 6.dp)
+                        .clip(shutterShape)
+                        .background(shutterColor)
+                        .clickable(enabled = !liveBusy) { onShutter() }
                 )
+                if (recording1) {
+                    Text(String.format(Locale.US, "● %02d:%02d", recSeconds / 60, recSeconds % 60))
+                }
                 if (status.isNotEmpty()) Text(status)
             }
         }

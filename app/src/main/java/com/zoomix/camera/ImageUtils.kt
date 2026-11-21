@@ -2,13 +2,19 @@ package com.zoomix.camera
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.media.ExifInterface
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 object ImageUtils {
     private fun rotationOf(file: File): Int = try {
@@ -65,61 +71,39 @@ object ImageUtils {
         return toJpeg(bmp, 95)
     }
 
-    /** Zoom digital: grava em [dst] o recorte central de [src] (factor > 1). [src] não é alterada. */
-    fun applyDigitalCrop(src: File, dst: File, factor: Float) {
-        val bmp = decodeUpright(src, 4096)
-        val w = (bmp.width / factor).roundToInt().coerceAtLeast(1)
-        val h = (bmp.height / factor).roundToInt().coerceAtLeast(1)
-        val x = (bmp.width - w) / 2
-        val y = (bmp.height - h) / 2
-        val cropped = Bitmap.createBitmap(bmp, x, y, w, h)
-        dst.writeBytes(toJpeg(cropped, 95))
-        copyExif(src, dst)
+    /**
+     * Horizon lock: gira a imagem [rollDeg] graus (positivo = sentido horário) e recorta o maior
+     * retângulo com a mesma proporção que cabe dentro da imagem girada (sem bordas pretas).
+     */
+    fun levelHorizon(src: Bitmap, rollDeg: Float): Bitmap {
+        val w = src.width
+        val h = src.height
+        val rad = Math.toRadians(abs(rollDeg).toDouble())
+        val ratio = max(w, h).toDouble() / min(w, h)
+        val f = 1.0 / (cos(rad) + sin(rad) * ratio)
+        val ow = (w * f).roundToInt().coerceAtLeast(1)
+        val oh = (h * f).roundToInt().coerceAtLeast(1)
+        val out = Bitmap.createBitmap(ow, oh, Bitmap.Config.ARGB_8888)
+        val m = Matrix()
+        m.postTranslate(-w / 2f, -h / 2f)
+        m.postRotate(rollDeg)
+        m.postTranslate(ow / 2f, oh / 2f)
+        Canvas(out).drawBitmap(src, m, Paint(Paint.FILTER_BITMAP_FLAG))
+        return out
     }
 
-    /** Largura x altura reais do arquivo, sem carregar a imagem inteira. */
-    fun sizeOf(file: File): Pair<Int, Int> {
-        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, o)
-        return o.outWidth to o.outHeight
-    }
-
-    /** Copia dados da câmera (data, modelo, exposição, ISO etc.) para um JPEG gerado pelo app. */
-    fun copyExif(src: File, dst: File) {
-        try {
-            val from = ExifInterface(src.absolutePath)
-            val to = ExifInterface(dst.absolutePath)
-            val tags = listOf(
-                ExifInterface.TAG_DATETIME, ExifInterface.TAG_DATETIME_ORIGINAL,
-                ExifInterface.TAG_MAKE, ExifInterface.TAG_MODEL,
-                ExifInterface.TAG_EXPOSURE_TIME, ExifInterface.TAG_F_NUMBER,
-                ExifInterface.TAG_ISO_SPEED_RATINGS, ExifInterface.TAG_FOCAL_LENGTH,
-                ExifInterface.TAG_WHITE_BALANCE, ExifInterface.TAG_FLASH,
-                ExifInterface.TAG_GPS_LATITUDE, ExifInterface.TAG_GPS_LATITUDE_REF,
-                ExifInterface.TAG_GPS_LONGITUDE, ExifInterface.TAG_GPS_LONGITUDE_REF,
-                ExifInterface.TAG_GPS_ALTITUDE, ExifInterface.TAG_GPS_ALTITUDE_REF,
-                ExifInterface.TAG_GPS_DATESTAMP, ExifInterface.TAG_GPS_TIMESTAMP
-            )
-            tags.forEach { t -> from.getAttribute(t)?.let { to.setAttribute(t, it) } }
-            // A imagem já está na orientação certa (pixels girados), então a orientação é "normal".
-            to.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
-            to.saveAttributes()
-        } catch (e: Exception) {
-            // Sem EXIF não é motivo para perder a foto.
+    /**
+     * Pós-processamento da foto tirada: horizon lock (se [rollDeg] != 0) e zoom digital
+     * (recorte central por [factor] > 1). Regrava o mesmo arquivo.
+     */
+    fun processStill(file: File, factor: Float, rollDeg: Float) {
+        var bmp = decodeUpright(file, 4096)
+        if (abs(rollDeg) > 0.01f) bmp = levelHorizon(bmp, rollDeg)
+        if (factor > 1.01f) {
+            val w = (bmp.width / factor).roundToInt().coerceAtLeast(1)
+            val h = (bmp.height / factor).roundToInt().coerceAtLeast(1)
+            bmp = Bitmap.createBitmap(bmp, (bmp.width - w) / 2, (bmp.height - h) / 2, w, h)
         }
-    }
-
-    /** Devolve [bytes] (JPEG) com os dados de câmera de [source]; se falhar, devolve [bytes] como estavam. */
-    fun withExifFrom(cacheDir: File, bytes: ByteArray, source: File): ByteArray {
-        val tmp = File(cacheDir, "exif_${System.nanoTime()}.jpg")
-        return try {
-            tmp.writeBytes(bytes)
-            copyExif(source, tmp)
-            tmp.readBytes()
-        } catch (e: Exception) {
-            bytes
-        } finally {
-            tmp.delete()
-        }
+        file.writeBytes(toJpeg(bmp, 95))
     }
 }

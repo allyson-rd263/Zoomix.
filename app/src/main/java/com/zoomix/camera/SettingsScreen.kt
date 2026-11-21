@@ -55,6 +55,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var msg by remember { mutableStateOf("") }
     var testing by remember { mutableStateOf(false) }
     var keepOriginal by remember { mutableStateOf(SecureStore.keepOriginal(ctx)) }
+    var videoQuality by remember { mutableStateOf(SecureStore.videoQuality(ctx)) }
+    var micOn by remember { mutableStateOf(SecureStore.micOn(ctx)) }
+    val lastAi = remember { SecureStore.lastAi(ctx) }
 
     Column(
         Modifier
@@ -116,6 +119,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }) { Text("Testar chave") }
                 }
                 if (msg.isNotEmpty()) Text(msg)
+                Text(
+                    "Última melhoria: " + lastAi.ifEmpty { "nenhuma ainda" },
+                    modifier = Modifier.padding(top = 4.dp)
+                )
                 TextButton(onClick = { showGuide = !showGuide }) {
                     Text(if (showGuide) "Esconder instruções" else "Como conseguir minha chave")
                 }
@@ -150,6 +157,40 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         GlassPanel(tier, Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Vídeo", fontWeight = FontWeight.Bold)
+                listOf(
+                    "max" to "Máxima do aparelho (até 4K)",
+                    "fhd" to "Full HD",
+                    "hd" to "HD (mais leve)"
+                ).forEach { (id, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            videoQuality = id
+                            SecureStore.setVideoQuality(ctx, id)
+                        },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = videoQuality == id, onClick = null)
+                        Text(label, Modifier.padding(start = 8.dp))
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Gravar áudio (microfone)")
+                    Switch(checked = micOn, onCheckedChange = {
+                        micOn = it
+                        SecureStore.setMicOn(ctx, it)
+                    })
+                }
+                Text("A qualidade vale na próxima vez que você abrir o modo Vídeo.")
+            }
+        }
+
+        GlassPanel(tier, Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Interface (vidro líquido)", fontWeight = FontWeight.Bold)
                 listOf("auto" to "Automático", "leve" to "Leve (celular fraco)", "completo" to "Completo").forEach { (id, label) ->
                     Row(
@@ -166,6 +207,6 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
 
-        Text("Zoomix 0.1", modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("Zoomix 1.0", modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
