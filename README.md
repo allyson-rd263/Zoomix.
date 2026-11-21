@@ -1,4 +1,4 @@
-# Zoomix 0.1 (etapa 1)
+# Zoomix 0.2 (etapa 1 + ajustes de captura)
 
 Câmera simples + melhoria de foto por IA (Gemini ou OpenAI, com a chave de cada usuário).
 
@@ -23,3 +23,13 @@ Câmera simples + melhoria de foto por IA (Gemini ou OpenAI, com a chave de cada
 - O código não foi compilado nem testado em aparelho. Podem aparecer erros de compilação; mande a mensagem de erro para ajustar.
 - Os nomes dos modelos estão em AiClients.kt (GEMINI_MODEL, OPENAI_MODEL) e podem mudar nos provedores.
 - A IA pode devolver a imagem em resolução MENOR que a da foto original. Teste com "Manter a foto original" ligado antes de confiar no descarte da original.
+
+## Mudanças da versão 0.2 (captura)
+- Resolução: pede a maior resolução de JPEG disponível (e o modo de alta resolução, quando o aparelho tem), em 4:3.
+- Prévia = foto: prévia 4:3 sem corte escondido (FIT_CENTER); a foto usa o sensor inteiro.
+- Foco e exposição por toque; controle de exposição (EV) quando o aparelho suporta.
+- Modos HDR e Noite do fabricante (CameraX Extensions), só aparecem se o aparelho oferecer.
+- Zoom digital: a captura inteira do sensor é guardada intacta (_full) e o recorte vira outro arquivo; EXIF (data, modelo, exposição, ISO) é copiado.
+- A foto melhorada pela IA recebe o EXIF da original.
+- "Manter a foto original" agora vem LIGADO por padrão durante os testes da IA.
+- Depois de cada foto o app mostra a resolução real capturada e a do sensor, para diagnóstico.

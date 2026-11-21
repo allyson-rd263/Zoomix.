@@ -51,8 +51,8 @@ object SecureStore {
         prefs(ctx).edit().putString("key_${p.name}", key.trim()).apply()
     }
 
-    /** Por padrão a original é descartada depois que a melhorada é salva. */
-    fun keepOriginal(ctx: Context): Boolean = prefs(ctx).getBoolean("keep_original", false)
+    /** Por padrão a original é mantida (ligado) até a IA ser validada nos seus testes. */
+    fun keepOriginal(ctx: Context): Boolean = prefs(ctx).getBoolean("keep_original", true)
 
     fun setKeepOriginal(ctx: Context, v: Boolean) {
         prefs(ctx).edit().putBoolean("keep_original", v).apply()

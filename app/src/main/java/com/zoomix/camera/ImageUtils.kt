@@ -65,14 +65,61 @@ object ImageUtils {
         return toJpeg(bmp, 95)
     }
 
-    /** Zoom digital: recorta o centro da foto (factor > 1) e regrava o arquivo. */
-    fun applyDigitalCrop(file: File, factor: Float) {
-        val bmp = decodeUpright(file, 4096)
+    /** Zoom digital: grava em [dst] o recorte central de [src] (factor > 1). [src] não é alterada. */
+    fun applyDigitalCrop(src: File, dst: File, factor: Float) {
+        val bmp = decodeUpright(src, 4096)
         val w = (bmp.width / factor).roundToInt().coerceAtLeast(1)
         val h = (bmp.height / factor).roundToInt().coerceAtLeast(1)
         val x = (bmp.width - w) / 2
         val y = (bmp.height - h) / 2
         val cropped = Bitmap.createBitmap(bmp, x, y, w, h)
-        file.writeBytes(toJpeg(cropped, 95))
+        dst.writeBytes(toJpeg(cropped, 95))
+        copyExif(src, dst)
+    }
+
+    /** Largura x altura reais do arquivo, sem carregar a imagem inteira. */
+    fun sizeOf(file: File): Pair<Int, Int> {
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, o)
+        return o.outWidth to o.outHeight
+    }
+
+    /** Copia dados da câmera (data, modelo, exposição, ISO etc.) para um JPEG gerado pelo app. */
+    fun copyExif(src: File, dst: File) {
+        try {
+            val from = ExifInterface(src.absolutePath)
+            val to = ExifInterface(dst.absolutePath)
+            val tags = listOf(
+                ExifInterface.TAG_DATETIME, ExifInterface.TAG_DATETIME_ORIGINAL,
+                ExifInterface.TAG_MAKE, ExifInterface.TAG_MODEL,
+                ExifInterface.TAG_EXPOSURE_TIME, ExifInterface.TAG_F_NUMBER,
+                ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, ExifInterface.TAG_FOCAL_LENGTH,
+                ExifInterface.TAG_WHITE_BALANCE, ExifInterface.TAG_FLASH,
+                ExifInterface.TAG_GPS_LATITUDE, ExifInterface.TAG_GPS_LATITUDE_REF,
+                ExifInterface.TAG_GPS_LONGITUDE, ExifInterface.TAG_GPS_LONGITUDE_REF,
+                ExifInterface.TAG_GPS_ALTITUDE, ExifInterface.TAG_GPS_ALTITUDE_REF,
+                ExifInterface.TAG_GPS_DATESTAMP, ExifInterface.TAG_GPS_TIMESTAMP
+            )
+            tags.forEach { t -> from.getAttribute(t)?.let { to.setAttribute(t, it) } }
+            // A imagem já está na orientação certa (pixels girados), então a orientação é "normal".
+            to.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+            to.saveAttributes()
+        } catch (e: Exception) {
+            // Sem EXIF não é motivo para perder a foto.
+        }
+    }
+
+    /** Devolve [bytes] (JPEG) com os dados de câmera de [source]; se falhar, devolve [bytes] como estavam. */
+    fun withExifFrom(cacheDir: File, bytes: ByteArray, source: File): ByteArray {
+        val tmp = File(cacheDir, "exif_${System.nanoTime()}.jpg")
+        return try {
+            tmp.writeBytes(bytes)
+            copyExif(source, tmp)
+            tmp.readBytes()
+        } catch (e: Exception) {
+            bytes
+        } finally {
+            tmp.delete()
+        }
     }
 }
