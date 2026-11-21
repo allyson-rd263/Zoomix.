@@ -33,6 +33,11 @@ class EnhanceWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         if (!file.exists()) return@withContext Result.failure()
 
         try {
+            if (inputData.getBoolean(KEY_SKIP_AI, false)) {
+                saveOriginal(file)
+                log("selfie salva sem IA (dá para ligar em Ajustes)")
+                return@withContext Result.success()
+            }
             val provider = SecureStore.provider(applicationContext)
             val key = SecureStore.apiKey(applicationContext, provider)
             if (key.isNullOrBlank()) {
@@ -87,6 +92,7 @@ class EnhanceWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
 
     companion object {
         const val KEY_PATH = "path"
+        const val KEY_SKIP_AI = "skip_ai"
         const val MAX_ATTEMPTS = 3
     }
 }

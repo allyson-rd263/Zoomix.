@@ -90,4 +90,41 @@ object SecureStore {
     fun setLastAi(ctx: Context, v: String) {
         prefs(ctx).edit().putString("last_ai", v).apply()
     }
+
+    /** "off", "auto", "natural" ou "forte". */
+    fun hdrMode(ctx: Context): String = prefs(ctx).getString("hdr_mode", "auto") ?: "auto"
+
+    fun setHdrMode(ctx: Context, v: String) {
+        prefs(ctx).edit().putString("hdr_mode", v).apply()
+    }
+
+    /** "natural", "medio" ou "forte". */
+    fun hdrIntensity(ctx: Context): String = prefs(ctx).getString("hdr_intensity", "natural") ?: "natural"
+
+    fun setHdrIntensity(ctx: Context, v: String) {
+        prefs(ctx).edit().putString("hdr_intensity", v).apply()
+    }
+
+    /** Melhorar selfies com IA (pode alterar rostos). Desligado por padrão. */
+    fun aiFront(ctx: Context): Boolean = prefs(ctx).getBoolean("ai_front", false)
+
+    fun setAiFront(ctx: Context, v: Boolean) {
+        prefs(ctx).edit().putBoolean("ai_front", v).apply()
+    }
+
+    /** "auto" (liga só em celular forte), "on" ou "off". */
+    fun zoomMap(ctx: Context): String = prefs(ctx).getString("zoom_map", "auto") ?: "auto"
+
+    fun setZoomMap(ctx: Context, v: String) {
+        prefs(ctx).edit().putString("zoom_map", v).apply()
+    }
+
+
+    /** Melhorar selfies com IA (padrão: desligado, a IA pode alterar rostos). */
+    fun selfieAi(ctx: Context): Boolean = prefs(ctx).getBoolean("selfie_ai", false)
+
+    fun setSelfieAi(ctx: Context, v: Boolean) {
+        prefs(ctx).edit().putBoolean("selfie_ai", v).apply()
+    }
+
 }

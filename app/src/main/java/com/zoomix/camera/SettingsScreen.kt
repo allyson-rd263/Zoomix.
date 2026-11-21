@@ -57,6 +57,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var keepOriginal by remember { mutableStateOf(SecureStore.keepOriginal(ctx)) }
     var videoQuality by remember { mutableStateOf(SecureStore.videoQuality(ctx)) }
     var micOn by remember { mutableStateOf(SecureStore.micOn(ctx)) }
+    var selfieAi by remember { mutableStateOf(SecureStore.selfieAi(ctx)) }
+    var zoomMap by remember { mutableStateOf(SecureStore.zoomMap(ctx)) }
+    val camLines = remember { CameraDiag.describeCameras(ctx) }
     val lastAi = remember { SecureStore.lastAi(ctx) }
 
     Column(
@@ -157,6 +160,46 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         GlassPanel(tier, Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Câmera", fontWeight = FontWeight.Bold)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Melhorar selfies com IA")
+                        Text("Desligado por padrão: a IA pode alterar rostos.")
+                    }
+                    Switch(checked = selfieAi, onCheckedChange = {
+                        selfieAi = it
+                        SecureStore.setSelfieAi(ctx, it)
+                    })
+                }
+                Text("Mini-tela do zoom digital", fontWeight = FontWeight.SemiBold)
+                listOf(
+                    "auto" to "Automático (só celular forte)",
+                    "on" to "Ligada",
+                    "off" to "Desligada"
+                ).forEach { (id, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            zoomMap = id
+                            SecureStore.setZoomMap(ctx, id)
+                        },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = zoomMap == id, onClick = null)
+                        Text(label, Modifier.padding(start = 8.dp))
+                    }
+                }
+                Text("Vale na próxima vez que você abrir a câmera.")
+                Text("Câmeras detectadas pelo Android", fontWeight = FontWeight.SemiBold)
+                camLines.forEach { Text(it) }
+            }
+        }
+
+        GlassPanel(tier, Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Vídeo", fontWeight = FontWeight.Bold)
                 listOf(
                     "max" to "Máxima do aparelho (até 4K)",
@@ -207,6 +250,6 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
         }
 
-        Text("Zoomix 1.0", modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("Zoomix 1.1", modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }

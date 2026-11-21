@@ -29,46 +29,81 @@ object ImageUtils {
         0
     }
 
-    /** Abre a foto já na orientação certa, com no máximo [maxSide] pixels no lado maior. */
+    /** Abre a foto na orientação correta, limitada a [maxSide] pixels. */
     fun decodeUpright(file: File, maxSide: Int): Bitmap {
+        require(maxSide > 0) { "Tamanho máximo inválido" }
+
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
+
         var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
-
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        var bmp = BitmapFactory.decodeFile(file.absolutePath, opts)
-            ?: throw IOException("Imagem inválida")
-
-        val rot = rotationOf(file)
-        if (rot != 0) {
-            val m = Matrix().apply { postRotate(rot.toFloat()) }
-            bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) {
+            sample *= 2
         }
-        val longSide = max(bmp.width, bmp.height)
-        if (longSide > maxSide) {
-            val s = maxSide.toFloat() / longSide
-            bmp = Bitmap.createScaledBitmap(
-                bmp, (bmp.width * s).roundToInt(), (bmp.height * s).roundToInt(), true
-            )
+
+        var bmp = BitmapFactory.decodeFile(
+            file.absolutePath,
+            BitmapFactory.Options().apply { inSampleSize = sample }
+        ) ?: throw IOException("Imagem inválida")
+
+        try {
+            val rot = rotationOf(file)
+            if (rot != 0) {
+                val rotated = Bitmap.createBitmap(
+                    bmp, 0, 0, bmp.width, bmp.height,
+                    Matrix().apply { postRotate(rot.toFloat()) }, true
+                )
+                if (rotated !== bmp) bmp.recycle()
+                bmp = rotated
+            }
+
+            val longSide = max(bmp.width, bmp.height)
+            if (longSide > maxSide) {
+                val scale = maxSide.toFloat() / longSide
+                val scaled = Bitmap.createScaledBitmap(
+                    bmp,
+                    (bmp.width * scale).roundToInt().coerceAtLeast(1),
+                    (bmp.height * scale).roundToInt().coerceAtLeast(1),
+                    true
+                )
+                if (scaled !== bmp) bmp.recycle()
+                bmp = scaled
+            }
+
+            return bmp
+        } catch (e: Throwable) {
+            if (!bmp.isRecycled) bmp.recycle()
+            throw e
         }
-        return bmp
     }
 
     fun toJpeg(bmp: Bitmap, quality: Int): ByteArray {
         val out = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        if (!bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)) {
+            throw IOException("Falha ao comprimir a imagem")
+        }
         return out.toByteArray()
     }
 
     /** Foto reduzida para enviar à IA (lado maior de até 2048 px). */
-    fun prepareForUpload(file: File): ByteArray = toJpeg(decodeUpright(file, 2048), 90)
+    fun prepareForUpload(file: File): ByteArray {
+        val bmp = decodeUpright(file, 2048)
+        return try {
+            toJpeg(bmp, 90)
+        } finally {
+            bmp.recycle()
+        }
+    }
 
     /** Converte a resposta da IA (PNG ou JPEG) em JPEG para salvar na galeria. */
     fun reencodeJpeg(bytes: ByteArray): ByteArray {
         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             ?: throw IOException("A IA devolveu uma imagem inválida")
-        return toJpeg(bmp, 95)
+        return try {
+            toJpeg(bmp, 95)
+        } finally {
+            bmp.recycle()
+        }
     }
 
     /**
@@ -98,12 +133,48 @@ object ImageUtils {
      */
     fun processStill(file: File, factor: Float, rollDeg: Float) {
         var bmp = decodeUpright(file, 4096)
-        if (abs(rollDeg) > 0.01f) bmp = levelHorizon(bmp, rollDeg)
-        if (factor > 1.01f) {
-            val w = (bmp.width / factor).roundToInt().coerceAtLeast(1)
-            val h = (bmp.height / factor).roundToInt().coerceAtLeast(1)
-            bmp = Bitmap.createBitmap(bmp, (bmp.width - w) / 2, (bmp.height - h) / 2, w, h)
+
+        try {
+            if (abs(rollDeg) > 0.01f) {
+                val leveled = levelHorizon(bmp, rollDeg)
+                if (leveled !== bmp) bmp.recycle()
+                bmp = leveled
+            }
+
+            if (factor > 1.01f) {
+                val w = (bmp.width / factor).roundToInt().coerceAtLeast(1)
+                val h = (bmp.height / factor).roundToInt().coerceAtLeast(1)
+                val cropped = Bitmap.createBitmap(
+                    bmp, (bmp.width - w) / 2, (bmp.height - h) / 2, w, h
+                )
+                if (cropped !== bmp) bmp.recycle()
+                bmp = cropped
+            }
+
+            val bytes = toJpeg(bmp, 95)
+            if (bytes.isEmpty()) throw IOException("Falha ao converter a foto")
+            file.writeBytes(bytes)
+        } finally {
+            if (!bmp.isRecycled) bmp.recycle()
         }
-        file.writeBytes(toJpeg(bmp, 95))
+    }
+
+    /** Copia dados da câmera (data, modelo, exposição, ISO etc.) e a orientação de [src] para [dst]. */
+    fun copyExif(src: File, dst: File) {
+        try {
+            val from = ExifInterface(src.absolutePath)
+            val to = ExifInterface(dst.absolutePath)
+            val tags = listOf(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.TAG_DATETIME, ExifInterface.TAG_DATETIME_ORIGINAL,
+                ExifInterface.TAG_MAKE, ExifInterface.TAG_MODEL,
+                ExifInterface.TAG_EXPOSURE_TIME, ExifInterface.TAG_F_NUMBER,
+                ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, ExifInterface.TAG_FOCAL_LENGTH
+            )
+            tags.forEach { t -> from.getAttribute(t)?.let { to.setAttribute(t, it) } }
+            to.saveAttributes()
+        } catch (e: Exception) {
+            // Sem EXIF não é motivo para perder a foto.
+        }
     }
 }
