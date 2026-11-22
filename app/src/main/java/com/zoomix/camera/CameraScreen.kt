@@ -997,39 +997,22 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 val h = size.height
 
                 if (isLandscape) {
-                    // Barra horizontal integrada à borda direita.
-                    moveTo(w, 0f)
+                    moveTo(w, h * 0.08f)
+                    cubicTo(w * 0.82f, h * 0.08f, w * 0.78f, 0f, w * 0.62f, 0f)
                     lineTo(w * 0.18f, 0f)
-                    cubicTo(
-                        w * 0.07f, 0f,
-                        0f, h * 0.18f,
-                        0f, h * 0.5f
-                    )
-                    cubicTo(
-                        0f, h * 0.82f,
-                        w * 0.07f, h,
-                        w * 0.18f, h
-                    )
-                    lineTo(w, h)
-                    close()
+                    cubicTo(w * 0.07f, 0f, 0f, h * 0.18f, 0f, h * 0.5f)
+                    cubicTo(0f, h * 0.82f, w * 0.07f, h, w * 0.18f, h)
+                    lineTo(w * 0.62f, h)
+                    cubicTo(w * 0.78f, h, w * 0.82f, h * 0.92f, w, h * 0.92f)
                 } else {
-                    // Barra vertical integrada à borda direita.
-                    moveTo(w, 0f)
-                    lineTo(w * 0.55f, 0f)
-                    cubicTo(
-                        w * 0.20f, 0f,
-                        0f, h * 0.08f,
-                        0f, h * 0.18f
-                    )
+                    moveTo(w, h * 0.08f)
+                    cubicTo(w * 0.65f, h * 0.08f, w * 0.62f, 0f, w * 0.45f, 0f)
+                    cubicTo(w * 0.20f, 0f, 0f, h * 0.08f, 0f, h * 0.18f)
                     lineTo(0f, h * 0.82f)
-                    cubicTo(
-                        0f, h * 0.92f,
-                        w * 0.20f, h,
-                        w * 0.55f, h
-                    )
-                    lineTo(w, h)
-                    close()
+                    cubicTo(0f, h * 0.92f, w * 0.20f, h, w * 0.45f, h)
+                    cubicTo(w * 0.62f, h, w * 0.65f, h * 0.92f, w, h * 0.92f)
                 }
+                close()
             }
         }
 
@@ -1136,34 +1119,20 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                         val h = size.height
 
                         if (isLandscape) {
-                            moveTo(w, 0f)
+                            moveTo(w, h * 0.08f)
+                            cubicTo(w * 0.82f, h * 0.08f, w * 0.78f, 0f, w * 0.62f, 0f)
                             lineTo(w * 0.18f, 0f)
-                            cubicTo(
-                                w * 0.07f, 0f,
-                                0f, h * 0.18f,
-                                0f, h * 0.5f
-                            )
-                            cubicTo(
-                                0f, h * 0.82f,
-                                w * 0.07f, h,
-                                w * 0.18f, h
-                            )
-                            lineTo(w, h)
+                            cubicTo(w * 0.07f, 0f, 0f, h * 0.18f, 0f, h * 0.5f)
+                            cubicTo(0f, h * 0.82f, w * 0.07f, h, w * 0.18f, h)
+                            lineTo(w * 0.62f, h)
+                            cubicTo(w * 0.78f, h, w * 0.82f, h * 0.92f, w, h * 0.92f)
                         } else {
-                            moveTo(w, 0f)
-                            lineTo(w * 0.55f, 0f)
-                            cubicTo(
-                                w * 0.20f, 0f,
-                                0f, h * 0.08f,
-                                0f, h * 0.18f
-                            )
+                            moveTo(w, h * 0.08f)
+                            cubicTo(w * 0.65f, h * 0.08f, w * 0.62f, 0f, w * 0.45f, 0f)
+                            cubicTo(w * 0.20f, 0f, 0f, h * 0.08f, 0f, h * 0.18f)
                             lineTo(0f, h * 0.82f)
-                            cubicTo(
-                                0f, h * 0.92f,
-                                w * 0.20f, h,
-                                w * 0.55f, h
-                            )
-                            lineTo(w, h)
+                            cubicTo(0f, h * 0.92f, w * 0.20f, h, w * 0.45f, h)
+                            cubicTo(w * 0.62f, h, w * 0.65f, h * 0.92f, w, h * 0.92f)
                         }
                     }
 
