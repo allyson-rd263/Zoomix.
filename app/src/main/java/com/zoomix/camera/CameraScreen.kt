@@ -983,13 +983,27 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         Column(
             Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 32.dp, bottom = 125.dp)
+                .padding(end = 0.dp, bottom = 125.dp)
                 .graphicsLayer { translationX = capsuleOffset.toPx() }
                 .width(48.dp)
                 .height(230.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(
+                    topStart = 24.dp,
+                    topEnd = 0.dp,
+                    bottomEnd = 0.dp,
+                    bottomStart = 24.dp
+                ))
                 .background(Color(0xC90A0A0A))
-                .border(1.dp, Color(0x88FFFFFF), RoundedCornerShape(24.dp))
+                .border(
+                    1.dp,
+                    Color(0x88FFFFFF),
+                    RoundedCornerShape(
+                        topStart = 24.dp,
+                        topEnd = 0.dp,
+                        bottomEnd = 0.dp,
+                        bottomStart = 24.dp
+                    )
+                )
                 .padding(vertical = 12.dp, horizontal = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
