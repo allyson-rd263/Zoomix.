@@ -58,6 +58,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var videoQuality by remember { mutableStateOf(SecureStore.videoQuality(ctx)) }
     var micOn by remember { mutableStateOf(SecureStore.micOn(ctx)) }
     var selfieAi by remember { mutableStateOf(SecureStore.selfieAi(ctx)) }
+    var selfieMirror by remember { mutableStateOf(SecureStore.selfieMirror(ctx)) }
     var zoomMap by remember { mutableStateOf(SecureStore.zoomMap(ctx)) }
     val camLines = remember { CameraDiag.describeCameras(ctx) }
     val lastAi = remember { SecureStore.lastAi(ctx) }
@@ -173,6 +174,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Switch(checked = selfieAi, onCheckedChange = {
                         selfieAi = it
                         SecureStore.setSelfieAi(ctx, it)
+                    })
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Espelhar câmera frontal")
+                        Text("Aplica o espelhamento às fotos e aos vídeos salvos. A prévia continua espelhada.")
+                    }
+                    Switch(checked = selfieMirror, onCheckedChange = {
+                        selfieMirror = it
+                        SecureStore.setSelfieMirror(ctx, it)
                     })
                 }
                 Text("Mini-tela do zoom digital", fontWeight = FontWeight.SemiBold)

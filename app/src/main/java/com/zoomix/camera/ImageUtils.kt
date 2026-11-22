@@ -131,7 +131,12 @@ object ImageUtils {
      * Pós-processamento da foto tirada: horizon lock (se [rollDeg] != 0) e zoom digital
      * (recorte central por [factor] > 1). Regrava o mesmo arquivo.
      */
-    fun processStill(file: File, factor: Float, rollDeg: Float) {
+    fun processStill(
+        file: File,
+        factor: Float,
+        rollDeg: Float,
+        mirrorHorizontal: Boolean = false
+    ) {
         var bmp = decodeUpright(file, 4096)
 
         try {
@@ -151,9 +156,26 @@ object ImageUtils {
                 bmp = cropped
             }
 
+            if (mirrorHorizontal) {
+                val matrix = Matrix().apply { setScale(-1f, 1f) }
+                val mirrored = Bitmap.createBitmap(
+                    bmp, 0, 0, bmp.width, bmp.height, matrix, true
+                )
+                if (mirrored !== bmp) bmp.recycle()
+                bmp = mirrored
+            }
+
             val bytes = toJpeg(bmp, 95)
             if (bytes.isEmpty()) throw IOException("Falha ao converter a foto")
             file.writeBytes(bytes)
+
+            ExifInterface(file.absolutePath).apply {
+                setAttribute(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL.toString()
+                )
+                saveAttributes()
+            }
         } finally {
             if (!bmp.isRecycled) bmp.recycle()
         }

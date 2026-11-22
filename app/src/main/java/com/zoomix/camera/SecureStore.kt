@@ -127,4 +127,12 @@ object SecureStore {
         prefs(ctx).edit().putBoolean("selfie_ai", v).apply()
     }
 
+    /** Espelhamento das fotos e vídeos salvos pela câmera frontal. */
+    fun selfieMirror(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("selfie_mirror", false)
+
+    fun setSelfieMirror(ctx: Context, v: Boolean) {
+        prefs(ctx).edit().putBoolean("selfie_mirror", v).apply()
+    }
+
 }

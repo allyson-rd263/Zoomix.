@@ -471,7 +471,10 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
     /** Depois que a foto está no arquivo: horizon lock/zoom digital, e depois IA ou galeria direta. */
     fun finishStill(file: File, extra: Float, roll: Float, front: Boolean) {
         try {
-            if (extra > 1.01f || roll != 0f) ImageUtils.processStill(file, extra, roll)
+            val mirror = front && SecureStore.selfieMirror(ctx)
+            if (extra > 1.01f || roll != 0f || mirror) {
+                ImageUtils.processStill(file, extra, roll, mirrorHorizontal = mirror)
+            }
             if (front && !SecureStore.selfieAi(ctx)) {
                 Gallery.saveJpeg(ctx, file.readBytes(), file.nameWithoutExtension)
                 file.delete()
@@ -753,7 +756,25 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         Handler(Looper.getMainLooper()).postDelayed({ rec.stop() }, LIVE_CLIP_MS)
     }
 
-    // Vídeo: grava em arquivo temporário (como o Live) e, ao parar, copia para Movies/Zoomix.
+    // Salva o vídeo final na galeria, preservando o original em caso de falha.
+    fun saveRecordedVideo(source: File, original: File, name: String, warning: String? = null) {
+        workExecutor.execute {
+            try {
+                Gallery.saveVideoFile(ctx, source, name)
+                if (source != original) source.delete()
+                original.delete()
+                mainExecutor.execute {
+                    status = warning ?: "Vídeo salvo na galeria"
+                }
+            } catch (e: Exception) {
+                mainExecutor.execute {
+                    status = "Gravou, mas não salvou na galeria: ${e.message}"
+                }
+            }
+        }
+    }
+
+    // Vídeo normal: espelha somente quando a câmera frontal e a opção estão ativas.
     fun toggleRecording() {
         val vc = videoCapture ?: return
         val current = recording
@@ -761,38 +782,65 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
             current.stop()
             return
         }
+
         val name = "ZOOMIX_VID_${stamp()}"
         val file = File(pendingDir(), "$name.mp4")
-        var pending = vc.output.prepareRecording(ctx, FileOutputOptions.Builder(file).build())
-        if (SecureStore.micOn(ctx) && audioGranted) pending = pending.withAudioEnabled()
+        val mirrorFile = File(pendingDir(), "${name}_MIRROR.mp4")
+        val mirrorFront = facingFront && SecureStore.selfieMirror(ctx)
+
+        var pending = vc.output.prepareRecording(
+            ctx,
+            FileOutputOptions.Builder(file).build()
+        )
+        if (SecureStore.micOn(ctx) && audioGranted) {
+            pending = pending.withAudioEnabled()
+        }
+
         recSeconds = 0
         status = "Gravando…"
+
         recording = pending.start(mainExecutor) { ev ->
             when (ev) {
-                is VideoRecordEvent.Status ->
-                    recSeconds = (ev.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
+                is VideoRecordEvent.Status -> {
+                    recSeconds = (
+                        ev.recordingStats.recordedDurationNanos / 1_000_000_000L
+                    ).toInt()
+                }
+
                 is VideoRecordEvent.Finalize -> {
                     recording = null
                     recSeconds = 0
+
                     if (ev.hasError()) {
                         val why = ev.cause?.message ?: "sem detalhes"
                         status = "Erro ao gravar o vídeo (código ${ev.error}): $why"
                         file.delete()
+                        mirrorFile.delete()
                     } else {
-                        status = "Salvando o vídeo na galeria…"
-                        workExecutor.execute {
-                            try {
-                                Gallery.saveVideoFile(ctx, file, name)
-                                file.delete()
-                                mainExecutor.execute { status = "Vídeo salvo na galeria" }
-                            } catch (e: Exception) {
-                                mainExecutor.execute {
-                                    status = "Gravou, mas não salvou na galeria: ${e.message}"
+                        if (mirrorFront) {
+                            status = "Espelhando vídeo…"
+                            VideoMirror.transform(ctx, file, mirrorFile) { success, error ->
+                                if (success && mirrorFile.isFile && mirrorFile.length() > 0L) {
+                                    status = "Salvando o vídeo na galeria…"
+                                    saveRecordedVideo(mirrorFile, file, name)
+                                } else {
+                                    mirrorFile.delete()
+                                    status = "Falha no espelhamento; salvando vídeo original…"
+                                    saveRecordedVideo(
+                                        file,
+                                        file,
+                                        name,
+                                        "Vídeo salvo sem espelhamento: ${error ?: "falha na conversão"}"
+                                    )
                                 }
                             }
+                        } else {
+                            status = "Salvando o vídeo na galeria…"
+                            saveRecordedVideo(file, file, name)
                         }
                     }
                 }
+
                 else -> {}
             }
         }
