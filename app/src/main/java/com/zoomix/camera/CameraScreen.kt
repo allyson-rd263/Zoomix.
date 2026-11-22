@@ -54,6 +54,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material3.Text
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.runtime.Composable
@@ -980,6 +981,29 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
             label = "zoomCapsuleOffset"
         )
 
+        val capsuleShape = remember {
+            GenericShape { size, _ ->
+                val w = size.width
+                val h = size.height
+
+                moveTo(w, 0f)
+                lineTo(w * 0.58f, 0f)
+                cubicTo(
+                    w * 0.16f, 0f,
+                    0f, h * 0.04f,
+                    0f, h * 0.16f
+                )
+                lineTo(0f, h * 0.84f)
+                cubicTo(
+                    0f, h * 0.96f,
+                    w * 0.16f, h,
+                    w * 0.58f, h
+                )
+                lineTo(w, h)
+                close()
+            }
+        }
+
         Column(
             Modifier
                 .align(Alignment.BottomEnd)
@@ -987,23 +1011,9 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 .graphicsLayer { translationX = capsuleOffset.toPx() }
                 .width(48.dp)
                 .height(230.dp)
-                .clip(RoundedCornerShape(
-                    topStart = 24.dp,
-                    topEnd = 0.dp,
-                    bottomEnd = 0.dp,
-                    bottomStart = 24.dp
-                ))
+                .clip(capsuleShape)
                 .background(Color(0xC90A0A0A))
-                .border(
-                    1.dp,
-                    Color(0x88FFFFFF),
-                    RoundedCornerShape(
-                        topStart = 24.dp,
-                        topEnd = 0.dp,
-                        bottomEnd = 0.dp,
-                        bottomStart = 24.dp
-                    )
-                )
+                .border(1.dp, Color(0x88FFFFFF), capsuleShape)
                 .padding(vertical = 12.dp, horizontal = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
