@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.view.Surface
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.AspectRatio
@@ -322,11 +323,16 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         previewView.scaleType =
             if (cam == Cam.VIDEO) PreviewView.ScaleType.FIT_CENTER else PreviewView.ScaleType.FILL_CENTER
 
-        fun newPreview() = Preview.Builder().apply {
+        val targetRotation = previewView.display?.rotation ?: Surface.ROTATION_0
+
+        fun newPreview() = Preview.Builder()
+            .setTargetRotation(targetRotation)
+            .apply {
             if (cam == Cam.VIDEO) setTargetAspectRatio(AspectRatio.RATIO_16_9)
         }.build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
         fun newPhoto() = ImageCapture.Builder()
+            .setTargetRotation(targetRotation)
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             .build()
 
@@ -341,11 +347,16 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 }
             }
             val recorder = Recorder.Builder()
+                .setAspectRatio(
+                    if (live) AspectRatio.RATIO_4_3 else AspectRatio.RATIO_16_9
+                )
                 .setQualitySelector(
                     QualitySelector.fromOrderedList(order, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD))
                 )
                 .build()
-            return VideoCapture.Builder(recorder).build()
+            return VideoCapture.Builder(recorder)
+                .setTargetRotation(targetRotation)
+                .build()
         }
 
         try {
