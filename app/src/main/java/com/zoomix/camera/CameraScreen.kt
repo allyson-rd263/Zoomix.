@@ -72,6 +72,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
@@ -986,20 +987,20 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 val w = size.width
                 val h = size.height
 
-                moveTo(w, 0f)
-                lineTo(w * 0.58f, 0f)
+                moveTo(0f, 0f)
+                lineTo(w * 0.42f, 0f)
                 cubicTo(
-                    w * 0.16f, 0f,
-                    0f, h * 0.04f,
-                    0f, h * 0.16f
+                    w * 0.78f, 0f,
+                    w, h * 0.04f,
+                    w, h * 0.16f
                 )
-                lineTo(0f, h * 0.84f)
+                lineTo(w, h * 0.84f)
                 cubicTo(
-                    0f, h * 0.96f,
-                    w * 0.16f, h,
-                    w * 0.58f, h
+                    w, h * 0.96f,
+                    w * 0.78f, h,
+                    w * 0.42f, h
                 )
-                lineTo(w, h)
+                lineTo(0f, h)
                 close()
             }
         }
@@ -1012,8 +1013,53 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 .width(48.dp)
                 .height(230.dp)
                 .clip(capsuleShape)
-                .background(Color(0xC90A0A0A))
-                .border(1.dp, Color(0x88FFFFFF), capsuleShape)
+                .background(
+                    if (tier == GlassTier.LEVE) {
+                        Brush.verticalGradient(
+                            listOf(Color(0xD90A0A0A), Color(0xD90A0A0A))
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xB8202938),
+                                Color(0xD9101724),
+                                Color(0xB8202938)
+                            )
+                        )
+                    }
+                )
+                .background(
+                    if (tier == GlassTier.COMPLETO) {
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color(0x12FFFFFF),
+                                Color(0x04FFFFFF)
+                            )
+                        )
+                    } else {
+                        Brush.horizontalGradient(
+                            listOf(Color.Transparent, Color.Transparent)
+                        )
+                    }
+                )
+                .border(
+                    1.dp,
+                    if (tier == GlassTier.LEVE) {
+                        Brush.linearGradient(
+                            listOf(Color(0x44FFFFFF), Color(0x22FFFFFF))
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                Color(0x99FFFFFF),
+                                Color(0x22FFFFFF),
+                                Color(0x66FFFFFF)
+                            )
+                        )
+                    },
+                    capsuleShape
+                )
                 .padding(vertical = 12.dp, horizontal = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
