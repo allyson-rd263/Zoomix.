@@ -997,20 +997,34 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 val h = size.height
 
                 if (isLandscape) {
-                    moveTo(w, h * 0.08f)
-                    cubicTo(w * 0.82f, h * 0.08f, w * 0.78f, 0f, w * 0.62f, 0f)
+                    // Barra horizontal: extremidade direita integrada à moldura.
+                    moveTo(w, 0f)
                     lineTo(w * 0.18f, 0f)
-                    cubicTo(w * 0.07f, 0f, 0f, h * 0.18f, 0f, h * 0.5f)
-                    cubicTo(0f, h * 0.82f, w * 0.07f, h, w * 0.18f, h)
-                    lineTo(w * 0.62f, h)
-                    cubicTo(w * 0.78f, h, w * 0.82f, h * 0.92f, w, h * 0.92f)
+                    cubicTo(
+                        w * 0.07f, 0f,
+                        0f, h * 0.18f,
+                        0f, h * 0.5f
+                    )
+                    cubicTo(
+                        0f, h * 0.82f,
+                        w * 0.07f, h,
+                        w * 0.18f, h
+                    )
+                    lineTo(w, h)
                 } else {
-                    moveTo(w, h * 0.08f)
-                    cubicTo(w * 0.65f, h * 0.08f, w * 0.62f, 0f, w * 0.45f, 0f)
-                    cubicTo(w * 0.20f, 0f, 0f, h * 0.08f, 0f, h * 0.18f)
-                    lineTo(0f, h * 0.82f)
-                    cubicTo(0f, h * 0.92f, w * 0.20f, h, w * 0.45f, h)
-                    cubicTo(w * 0.62f, h, w * 0.65f, h * 0.92f, w, h * 0.92f)
+                    // Barra vertical: vidro se alarga para dentro e se funde à borda.
+                    moveTo(w, 0f)
+                    cubicTo(
+                        w * 0.62f, 0f,
+                        w * 0.06f, h * 0.02f,
+                        0f, h * 0.16f
+                    )
+                    lineTo(0f, h * 0.84f)
+                    cubicTo(
+                        0f, h * 0.98f,
+                        w * 0.62f, h,
+                        w, h
+                    )
                 }
                 close()
             }
@@ -1114,37 +1128,49 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     }
                 )
                 .drawWithCache {
-                    val outline = Path().apply {
+                    val contour = Path().apply {
                         val w = size.width
                         val h = size.height
 
                         if (isLandscape) {
-                            moveTo(w, h * 0.08f)
-                            cubicTo(w * 0.82f, h * 0.08f, w * 0.78f, 0f, w * 0.62f, 0f)
+                            moveTo(w, 0f)
                             lineTo(w * 0.18f, 0f)
-                            cubicTo(w * 0.07f, 0f, 0f, h * 0.18f, 0f, h * 0.5f)
-                            cubicTo(0f, h * 0.82f, w * 0.07f, h, w * 0.18f, h)
-                            lineTo(w * 0.62f, h)
-                            cubicTo(w * 0.78f, h, w * 0.82f, h * 0.92f, w, h * 0.92f)
+                            cubicTo(
+                                w * 0.07f, 0f,
+                                0f, h * 0.18f,
+                                0f, h * 0.5f
+                            )
+                            cubicTo(
+                                0f, h * 0.82f,
+                                w * 0.07f, h,
+                                w * 0.18f, h
+                            )
+                            lineTo(w, h)
                         } else {
-                            moveTo(w, h * 0.08f)
-                            cubicTo(w * 0.65f, h * 0.08f, w * 0.62f, 0f, w * 0.45f, 0f)
-                            cubicTo(w * 0.20f, 0f, 0f, h * 0.08f, 0f, h * 0.18f)
-                            lineTo(0f, h * 0.82f)
-                            cubicTo(0f, h * 0.92f, w * 0.20f, h, w * 0.45f, h)
-                            cubicTo(w * 0.62f, h, w * 0.65f, h * 0.92f, w, h * 0.92f)
+                            moveTo(w, 0f)
+                            cubicTo(
+                                w * 0.62f, 0f,
+                                w * 0.06f, h * 0.02f,
+                                0f, h * 0.16f
+                            )
+                            lineTo(0f, h * 0.84f)
+                            cubicTo(
+                                0f, h * 0.98f,
+                                w * 0.62f, h,
+                                w, h
+                            )
                         }
                     }
 
                     onDrawWithContent {
                         drawContent()
                         drawPath(
-                            path = outline,
+                            path = contour,
                             brush = Brush.linearGradient(
                                 colors = listOf(
-                                    Color(0x33FFFFFF),
-                                    Color(0x18FFFFFF),
-                                    Color(0x44FFFFFF)
+                                    Color(0x22FFFFFF),
+                                    Color(0x10FFFFFF),
+                                    Color(0x33FFFFFF)
                                 )
                             ),
                             style = Stroke(width = 1.dp.toPx())
