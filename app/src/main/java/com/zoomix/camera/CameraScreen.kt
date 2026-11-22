@@ -35,6 +35,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -259,6 +261,14 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
     var lenses by remember { mutableStateOf<List<Lens>>(emptyList()) }
     var zoom by remember { mutableStateOf(1f) }
     var zoomBarOpen by remember { mutableStateOf(false) }
+    var zoomInteraction by remember { mutableStateOf(0) }
+
+    LaunchedEffect(zoomBarOpen, zoomInteraction) {
+        if (zoomBarOpen) {
+            delay(2000)
+            zoomBarOpen = false
+        }
+    }
     var status by remember { mutableStateOf("") }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recSeconds by remember { mutableStateOf(0) }
@@ -447,6 +457,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                         max(maxZoom, hwMin)
                     )
                 }
+                zoomInteraction++
             }
             true
         }
@@ -932,91 +943,110 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
             }
         )
 
-        // Controle lateral de zoom com escala logarítmica.
+        // Faixa discreta para revelar a cápsula, afastada da borda do gesto Voltar.
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 40.dp, bottom = 190.dp)
+                .size(width = 48.dp, height = 100.dp)
+                .pointerInput(Unit) {
+                    var inwardSwipe = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { inwardSwipe = 0f },
+                        onHorizontalDrag = { change, dragAmount ->
+                            inwardSwipe += dragAmount
+                            if (inwardSwipe <= -24.dp.toPx()) {
+                                zoomBarOpen = true
+                                zoomInteraction++
+                                inwardSwipe = 0f
+                            }
+                            change.consume()
+                        },
+                        onDragEnd = { inwardSwipe = 0f },
+                        onDragCancel = { inwardSwipe = 0f }
+                    )
+                }
+        )
+
+        // Cápsula lateral animada com escala logarítmica.
         val zoomFraction = if (hwMin > 0f && maxZoom > hwMin) {
             (ln(zc / hwMin) / ln(maxZoom / hwMin)).coerceIn(0f, 1f)
         } else {
             0f
         }
 
+        val capsuleOffset by animateDpAsState(
+            targetValue = if (zoomBarOpen) 0.dp else 86.dp,
+            label = "zoomCapsuleOffset"
+        )
+
         Column(
             Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 10.dp),
+                .align(Alignment.BottomEnd)
+                .padding(end = 32.dp, bottom = 125.dp)
+                .graphicsLayer { translationX = capsuleOffset.toPx() }
+                .width(54.dp)
+                .height(230.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xF20A0A0A))
+                .border(1.dp, Color(0x99FFFFFF), RoundedCornerShape(28.dp))
+                .padding(vertical = 12.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (zoomBarOpen) {
-                Text(
-                    fmtZoom(zc),
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    style = TextStyle(
-                        shadow = Shadow(Color.Black, Offset(0f, 1f), 4f)
-                    )
+            Text(
+                fmtZoom(zc),
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .pointerInput(hwMin, maxZoom) {
+                        val trackHeight = size.height.toFloat().coerceAtLeast(1f)
+                        val range = (maxZoom / hwMin).coerceAtLeast(1f)
+
+                        fun updateFromPosition(y: Float) {
+                            val fraction = (1f - y / trackHeight).coerceIn(0f, 1f)
+                            zoom = (hwMin * range.pow(fraction))
+                                .coerceIn(hwMin, max(maxZoom, hwMin))
+                        }
+
+                        detectDragGestures(
+                            onDragStart = { position ->
+                                zoomInteraction++
+                                updateFromPosition(position.y)
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                zoomInteraction++
+                                updateFromPosition(change.position.y)
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier
+                        .width(3.dp)
+                        .fillMaxHeight(0.9f)
+                        .background(Color(0x99FFFFFF), CircleShape)
                 )
 
                 Box(
                     Modifier
-                        .width(44.dp)
-                        .height(220.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0x99111827))
-                        .border(
-                            1.dp,
-                            Color(0x88FFFFFF),
-                            RoundedCornerShape(24.dp)
-                        )
-                        .pointerInput(hwMin, maxZoom) {
-                            val trackHeight = size.height.toFloat().coerceAtLeast(1f)
-                            val range = (maxZoom / hwMin).coerceAtLeast(1f)
-
-                            fun updateFromPosition(y: Float) {
-                                val fraction = (1f - y / trackHeight).coerceIn(0f, 1f)
-                                zoom = (hwMin * range.pow(fraction))
-                                    .coerceIn(hwMin, max(maxZoom, hwMin))
-                            }
-
-                            detectDragGestures(
-                                onDragStart = { position ->
-                                    updateFromPosition(position.y)
-                                },
-                                onDrag = { change, _ ->
-                                    change.consume()
-                                    updateFromPosition(change.position.y)
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        Modifier
-                            .width(3.dp)
-                            .fillMaxHeight(0.8f)
-                            .background(Color(0x99FFFFFF), CircleShape)
-                    )
-
-                    Box(
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 22.dp)
-                            .graphicsLayer {
-                                translationY = (1f - zoomFraction) * 176.dp.toPx()
-                            }
-                            .size(18.dp)
-                            .background(YELLOW, CircleShape)
-                            .border(2.dp, Color.White, CircleShape)
-                    )
-                }
-            }
-
-            Bubble(
-                if (zoomBarOpen) "Fechar" else "Zoom",
-                tier,
-                selected = zoomBarOpen
-            ) {
-                zoomBarOpen = !zoomBarOpen
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp)
+                        .graphicsLayer {
+                            translationY = (1f - zoomFraction) * 138.dp.toPx()
+                        }
+                        .size(18.dp)
+                        .background(YELLOW, CircleShape)
+                        .border(2.dp, Color.White, CircleShape)
+                )
             }
         }
 
@@ -1117,21 +1147,6 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                             if (!busy) lensId = if (l.isMain) null else l.id
                         }
                     }
-                }
-            }
-
-            // Zoom: bolhas de atalho (a ativa mostra o zoom atual) + pinça na tela.
-            val presets = buildList {
-                if (hwMin < 0.95f) add(hwMin)
-                add(1f)
-                listOf(2f, 5f, 10f, 20f, 50f).forEach { if (it <= maxZoom + 0.01f) add(it) }
-            }.distinct()
-            val activePreset = presets.lastOrNull { it <= zc + 0.02f } ?: presets.first()
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                presets.forEach { pz ->
-                    val active = pz == activePreset
-                    val label = if (active) fmtZoom(zc) + (if (digital > 1.01f) " digital" else "") else fmtZoom(pz)
-                    Bubble(label, tier, selected = active) { zoom = pz }
                 }
             }
 
