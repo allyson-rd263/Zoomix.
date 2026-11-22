@@ -135,4 +135,13 @@ object SecureStore {
         prefs(ctx).edit().putBoolean("selfie_mirror", v).apply()
     }
 
+
+    /** Controle de zoom pelos botões físicos de volume. */
+    fun volumeZoom(ctx: Context): Boolean =
+        prefs(ctx).getBoolean("volume_zoom", false)
+
+    fun setVolumeZoom(ctx: Context, v: Boolean) {
+        prefs(ctx).edit().putBoolean("volume_zoom", v).apply()
+    }
+
 }

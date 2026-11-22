@@ -60,6 +60,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var selfieAi by remember { mutableStateOf(SecureStore.selfieAi(ctx)) }
     var selfieMirror by remember { mutableStateOf(SecureStore.selfieMirror(ctx)) }
     var zoomMap by remember { mutableStateOf(SecureStore.zoomMap(ctx)) }
+    var volumeZoom by remember { mutableStateOf(SecureStore.volumeZoom(ctx)) }
     val camLines = remember { CameraDiag.describeCameras(ctx) }
     val lastAi = remember { SecureStore.lastAi(ctx) }
 
@@ -188,6 +189,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Switch(checked = selfieMirror, onCheckedChange = {
                         selfieMirror = it
                         SecureStore.setSelfieMirror(ctx, it)
+                    })
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Controle de zoom pelos botões de volume")
+                        Text("Um clique abre a régua; os próximos ajustam o zoom.")
+                    }
+                    Switch(checked = volumeZoom, onCheckedChange = {
+                        volumeZoom = it
+                        SecureStore.setVolumeZoom(ctx, it)
                     })
                 }
                 Text("Mini-tela do zoom digital", fontWeight = FontWeight.SemiBold)

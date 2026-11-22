@@ -2,6 +2,7 @@ package com.zoomix.camera
 
 import android.Manifest
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
@@ -10,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.view.Surface
+import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.AspectRatio
@@ -32,6 +34,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,9 +101,18 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
+
+private tailrec fun Context.findMainActivity(): MainActivity? =
+    when (this) {
+        is MainActivity -> this
+        is ContextWrapper -> baseContext.findMainActivity()
+        else -> null
+    }
 
 private const val PHOTO_MAX_ZOOM = 50f
 private const val FRONT_MAX_ZOOM = 4f
@@ -245,6 +258,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
     var lensId by remember { mutableStateOf<String?>(null) }
     var lenses by remember { mutableStateOf<List<Lens>>(emptyList()) }
     var zoom by remember { mutableStateOf(1f) }
+    var zoomBarOpen by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recSeconds by remember { mutableStateOf(0) }
@@ -412,6 +426,39 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         cam != Cam.FOTO -> min(hwMax, VIDEO_MAX_ZOOM)
         facingFront -> max(hwMax, FRONT_MAX_ZOOM)
         else -> PHOTO_MAX_ZOOM
+    }
+
+    val activity = remember(ctx) { ctx.findMainActivity() }
+    val volumeAction = rememberUpdatedState<(Int, Int) -> Boolean> { keyCode, repeatCount ->
+        if (!SecureStore.volumeZoom(ctx)) {
+            false
+        } else {
+            if (repeatCount == 0) {
+                if (!zoomBarOpen) {
+                    zoomBarOpen = true
+                } else {
+                    val factor = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                        1.1f
+                    } else {
+                        1f / 1.1f
+                    }
+                    zoom = (zoom * factor).coerceIn(
+                        hwMin,
+                        max(maxZoom, hwMin)
+                    )
+                }
+            }
+            true
+        }
+    }
+
+    DisposableEffect(activity) {
+        activity?.volumeZoomHandler = { keyCode, repeatCount ->
+            volumeAction.value(keyCode, repeatCount)
+        }
+        onDispose {
+            activity?.volumeZoomHandler = null
+        }
     }
     val zc = zoom.coerceIn(hwMin, max(maxZoom, hwMin))
     val hwZoom = zc.coerceIn(hwMin, hwMax)
@@ -884,6 +931,94 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 }
             }
         )
+
+        // Controle lateral de zoom com escala logarítmica.
+        val zoomFraction = if (hwMin > 0f && maxZoom > hwMin) {
+            (ln(zc / hwMin) / ln(maxZoom / hwMin)).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+
+        Column(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (zoomBarOpen) {
+                Text(
+                    fmtZoom(zc),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    style = TextStyle(
+                        shadow = Shadow(Color.Black, Offset(0f, 1f), 4f)
+                    )
+                )
+
+                Box(
+                    Modifier
+                        .width(44.dp)
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0x99111827))
+                        .border(
+                            1.dp,
+                            Color(0x88FFFFFF),
+                            RoundedCornerShape(24.dp)
+                        )
+                        .pointerInput(hwMin, maxZoom) {
+                            val trackHeight = size.height.toFloat().coerceAtLeast(1f)
+                            val range = (maxZoom / hwMin).coerceAtLeast(1f)
+
+                            fun updateFromPosition(y: Float) {
+                                val fraction = (1f - y / trackHeight).coerceIn(0f, 1f)
+                                zoom = (hwMin * range.pow(fraction))
+                                    .coerceIn(hwMin, max(maxZoom, hwMin))
+                            }
+
+                            detectDragGestures(
+                                onDragStart = { position ->
+                                    updateFromPosition(position.y)
+                                },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    updateFromPosition(change.position.y)
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        Modifier
+                            .width(3.dp)
+                            .fillMaxHeight(0.8f)
+                            .background(Color(0x99FFFFFF), CircleShape)
+                    )
+
+                    Box(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 22.dp)
+                            .graphicsLayer {
+                                translationY = (1f - zoomFraction) * 176.dp.toPx()
+                            }
+                            .size(18.dp)
+                            .background(YELLOW, CircleShape)
+                            .border(2.dp, Color.White, CircleShape)
+                    )
+                }
+            }
+
+            Bubble(
+                if (zoomBarOpen) "Fechar" else "Zoom",
+                tier,
+                selected = zoomBarOpen
+            ) {
+                zoomBarOpen = !zoomBarOpen
+            }
+        }
 
         // Linha de nível do horizon lock: fica reta quando o celular está nivelado.
         if (horizonOn && cam == Cam.FOTO && !facingFront) {
