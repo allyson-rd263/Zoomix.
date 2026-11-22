@@ -1181,7 +1181,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                             style = Stroke(width = 1.dp.toPx())
                         )
                     }
-                )
+                }
                 .padding(
                     horizontal = if (isLandscape) 12.dp else 7.dp,
                     vertical = if (isLandscape) 7.dp else 12.dp
