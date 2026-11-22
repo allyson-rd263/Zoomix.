@@ -3,6 +3,7 @@ package com.zoomix.camera
 import android.Manifest
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.res.Configuration
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
@@ -39,6 +40,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -79,6 +81,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
@@ -970,7 +973,10 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 }
         )
 
-        // Cápsula lateral animada com escala logarítmica.
+        // Controle de zoom adaptável à orientação, mantendo a mesma ancoragem.
+        val isLandscape =
+            LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
         val zoomFraction = if (hwMin > 0f && maxZoom > hwMin) {
             (ln(zc / hwMin) / ln(maxZoom / hwMin)).coerceIn(0f, 1f)
         } else {
@@ -982,61 +988,115 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
             label = "zoomCapsuleOffset"
         )
 
-        val capsuleShape = remember {
-            GenericShape { size, _ ->
-                val w = size.width
-                val h = size.height
-
-                moveTo(0f, 0f)
-                lineTo(w * 0.42f, 0f)
-                cubicTo(
-                    w * 0.78f, 0f,
-                    w, h * 0.04f,
-                    w, h * 0.16f
-                )
-                lineTo(w, h * 0.84f)
-                cubicTo(
-                    w, h * 0.96f,
-                    w * 0.78f, h,
-                    w * 0.42f, h
-                )
-                lineTo(0f, h)
-                close()
+        val capsuleShape = remember(isLandscape) {
+            if (isLandscape) {
+                RoundedCornerShape(50)
+            } else {
+                GenericShape { size, _ ->
+                    val w = size.width
+                    val h = size.height
+                    moveTo(0f, 0f)
+                    lineTo(w * 0.42f, 0f)
+                    cubicTo(w * 0.78f, 0f, w, h * 0.04f, w, h * 0.16f)
+                    lineTo(w, h * 0.84f)
+                    cubicTo(w, h * 0.96f, w * 0.78f, h, w * 0.42f, h)
+                    lineTo(0f, h)
+                    close()
+                }
             }
         }
 
-        Column(
+        val zoomDragModifier = Modifier.pointerInput(hwMin, maxZoom, isLandscape) {
+            val trackLength = if (isLandscape) {
+                size.width.toFloat().coerceAtLeast(1f)
+            } else {
+                size.height.toFloat().coerceAtLeast(1f)
+            }
+            val range = (maxZoom / hwMin).coerceAtLeast(1f)
+
+            fun updateFromPosition(position: Offset) {
+                val fraction = if (isLandscape) {
+                    val usableLength = (trackLength - 5.dp.toPx()).coerceAtLeast(1f)
+                    (position.x / usableLength).coerceIn(0f, 1f)
+                } else {
+                    (1f - position.y / trackLength).coerceIn(0f, 1f)
+                }
+
+                zoom = (hwMin * range.pow(fraction))
+                    .coerceIn(hwMin, max(maxZoom, hwMin))
+            }
+
+            detectDragGestures(
+                onDragStart = { position ->
+                    zoomInteraction++
+                    updateFromPosition(position)
+                },
+                onDrag = { change, _ ->
+                    change.consume()
+                    zoomInteraction++
+                    updateFromPosition(change.position)
+                }
+            )
+        }
+
+        Box(
             Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 0.dp, bottom = 125.dp)
                 .graphicsLayer { translationX = capsuleOffset.toPx() }
-                .width(48.dp)
-                .height(230.dp)
+                .width(if (isLandscape) 230.dp else 48.dp)
+                .height(if (isLandscape) 48.dp else 230.dp)
                 .clip(capsuleShape)
                 .background(
                     if (tier == GlassTier.LEVE) {
-                        Brush.verticalGradient(
-                            listOf(Color(0xD90A0A0A), Color(0xD90A0A0A))
-                        )
-                    } else {
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xB8202938),
-                                Color(0xD9101724),
-                                Color(0xB8202938)
+                        if (isLandscape) {
+                            Brush.horizontalGradient(
+                                listOf(Color(0xD90A0A0A), Color(0xD90A0A0A))
                             )
-                        )
+                        } else {
+                            Brush.verticalGradient(
+                                listOf(Color(0xD90A0A0A), Color(0xD90A0A0A))
+                            )
+                        }
+                    } else {
+                        if (isLandscape) {
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xB8202938),
+                                    Color(0xD9101724),
+                                    Color(0xB8202938)
+                                )
+                            )
+                        } else {
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xB8202938),
+                                    Color(0xD9101724),
+                                    Color(0xB8202938)
+                                )
+                            )
+                        }
                     }
                 )
                 .background(
                     if (tier == GlassTier.COMPLETO) {
-                        Brush.horizontalGradient(
-                            listOf(
-                                Color.Transparent,
-                                Color(0x12FFFFFF),
-                                Color(0x04FFFFFF)
+                        if (isLandscape) {
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color(0x12FFFFFF),
+                                    Color(0x04FFFFFF)
+                                )
                             )
-                        )
+                        } else {
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color(0x12FFFFFF),
+                                    Color(0x04FFFFFF)
+                                )
+                            )
+                        }
                     } else {
                         Brush.horizontalGradient(
                             listOf(Color.Transparent, Color.Transparent)
@@ -1047,100 +1107,153 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     1.dp,
                     if (tier == GlassTier.LEVE) {
                         Brush.linearGradient(
-                            listOf(Color(0x44FFFFFF), Color(0x22FFFFFF))
+                            listOf(Color(0x33FFFFFF), Color(0x18FFFFFF))
                         )
                     } else {
                         Brush.linearGradient(
                             listOf(
-                                Color(0x99FFFFFF),
-                                Color(0x22FFFFFF),
-                                Color(0x66FFFFFF)
+                                Color(0x55FFFFFF),
+                                Color(0x18FFFFFF),
+                                Color(0x44FFFFFF)
                             )
                         )
                     },
                     capsuleShape
                 )
-                .padding(vertical = 12.dp, horizontal = 7.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(
+                    horizontal = if (isLandscape) 12.dp else 7.dp,
+                    vertical = if (isLandscape) 7.dp else 12.dp
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                fmtZoom(zc),
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .pointerInput(hwMin, maxZoom) {
-                        val trackHeight = size.height.toFloat().coerceAtLeast(1f)
-                        val range = (maxZoom / hwMin).coerceAtLeast(1f)
-
-                        fun updateFromPosition(y: Float) {
-                            val fraction = (1f - y / trackHeight).coerceIn(0f, 1f)
-                            zoom = (hwMin * range.pow(fraction))
-                                .coerceIn(hwMin, max(maxZoom, hwMin))
-                        }
-
-                        detectDragGestures(
-                            onDragStart = { position ->
-                                zoomInteraction++
-                                updateFromPosition(position.y)
-                            },
-                            onDrag = { change, _ ->
-                                change.consume()
-                                zoomInteraction++
-                                updateFromPosition(change.position.y)
-                            }
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .fillMaxHeight(0.9f)
-                        .background(Color(0x99FFFFFF), CircleShape)
-                )
-
-                Column(
-                    Modifier
-                        .width(18.dp)
-                        .fillMaxHeight(0.9f),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                    horizontalAlignment = Alignment.CenterHorizontally
+            if (isLandscape) {
+                Row(
+                    Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    repeat(11) { index ->
-                        val tickWidth = when {
-                            index % 5 == 0 -> 14.dp
-                            index % 2 == 0 -> 9.dp
-                            else -> 5.dp
+                    Text(
+                        fmtZoom(zc),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    BoxWithConstraints(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .then(zoomDragModifier),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val horizontalIndicatorTravel =
+                            (maxWidth - 5.dp).coerceAtLeast(0.dp)
+
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(18.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            repeat(11) { index ->
+                                val tickHeight = when {
+                                    index % 5 == 0 -> 14.dp
+                                    index % 2 == 0 -> 9.dp
+                                    else -> 5.dp
+                                }
+                                val tickColor = if (index % 5 == 0) {
+                                    Color(0xB3FFFFFF)
+                                } else {
+                                    Color(0x66FFFFFF)
+                                }
+
+                                Box(
+                                    Modifier
+                                        .width(1.dp)
+                                        .height(tickHeight)
+                                        .background(tickColor)
+                                )
+                            }
                         }
 
                         Box(
                             Modifier
-                                .width(tickWidth)
-                                .height(1.dp)
-                                .background(Color(0x99FFFFFF))
+                                .align(Alignment.CenterStart)
+                                .graphicsLayer {
+                                    translationX =
+                                        zoomFraction * horizontalIndicatorTravel.toPx()
+                                }
+                                .width(5.dp)
+                                .height(20.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(YELLOW)
                         )
                     }
                 }
+            } else {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        fmtZoom(zc),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
 
-                Box(
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 8.dp)
-                        .graphicsLayer {
-                            translationY = (1f - zoomFraction) * 0.9f * 158.dp.toPx()
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .then(zoomDragModifier),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            Modifier
+                                .width(18.dp)
+                                .fillMaxHeight(0.9f),
+                            verticalArrangement = Arrangement.SpaceBetween,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            repeat(11) { index ->
+                                val tickWidth = when {
+                                    index % 5 == 0 -> 14.dp
+                                    index % 2 == 0 -> 9.dp
+                                    else -> 5.dp
+                                }
+                                val tickColor = if (index % 5 == 0) {
+                                    Color(0xB3FFFFFF)
+                                } else {
+                                    Color(0x66FFFFFF)
+                                }
+
+                                Box(
+                                    Modifier
+                                        .width(tickWidth)
+                                        .height(1.dp)
+                                        .background(tickColor)
+                                )
+                            }
                         }
-                        .width(20.dp)
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(YELLOW)
-                )
+
+                        Box(
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 8.dp)
+                                .graphicsLayer {
+                                    translationY =
+                                        (1f - zoomFraction) * 0.9f * 158.dp.toPx()
+                                }
+                                .width(20.dp)
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(YELLOW)
+                        )
+                    }
+                }
             }
         }
 
