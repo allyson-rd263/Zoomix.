@@ -985,12 +985,12 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 .align(Alignment.BottomEnd)
                 .padding(end = 32.dp, bottom = 125.dp)
                 .graphicsLayer { translationX = capsuleOffset.toPx() }
-                .width(54.dp)
+                .width(48.dp)
                 .height(230.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color(0xF20A0A0A))
-                .border(1.dp, Color(0x99FFFFFF), RoundedCornerShape(28.dp))
-                .padding(vertical = 12.dp, horizontal = 8.dp),
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xC90A0A0A))
+                .border(1.dp, Color(0x88FFFFFF), RoundedCornerShape(24.dp))
+                .padding(vertical = 12.dp, horizontal = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1031,21 +1031,45 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
             ) {
                 Box(
                     Modifier
-                        .width(3.dp)
+                        .width(2.dp)
                         .fillMaxHeight(0.9f)
                         .background(Color(0x99FFFFFF), CircleShape)
                 )
+
+                Column(
+                    Modifier
+                        .width(18.dp)
+                        .fillMaxHeight(0.9f),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    repeat(11) { index ->
+                        val tickWidth = when {
+                            index % 5 == 0 -> 14.dp
+                            index % 2 == 0 -> 9.dp
+                            else -> 5.dp
+                        }
+
+                        Box(
+                            Modifier
+                                .width(tickWidth)
+                                .height(1.dp)
+                                .background(Color(0x99FFFFFF))
+                        )
+                    }
+                }
 
                 Box(
                     Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 8.dp)
                         .graphicsLayer {
-                            translationY = (1f - zoomFraction) * 138.dp.toPx()
+                            translationY = (1f - zoomFraction) * 0.9f * 158.dp.toPx()
                         }
-                        .size(18.dp)
-                        .background(YELLOW, CircleShape)
-                        .border(2.dp, Color.White, CircleShape)
+                        .width(20.dp)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(YELLOW)
                 )
             }
         }
