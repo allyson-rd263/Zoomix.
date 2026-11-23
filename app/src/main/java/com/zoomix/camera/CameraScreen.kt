@@ -1012,7 +1012,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     )
                     lineTo(w, h)
                 } else {
-                    // Barra vertical: vidro se alarga para dentro e se funde à borda.
+                    // A e D: curvas originais preservadas.
                     moveTo(w, 0f)
                     cubicTo(
                         w * 0.62f, 0f,
@@ -1024,6 +1024,21 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                         0f, h * 0.98f,
                         w * 0.62f, h,
                         w, h
+                    )
+
+                    // C: curva inferior direita projetada para dentro.
+                    cubicTo(
+                        w * 0.82f, h,
+                        w * 0.72f, h * 0.94f,
+                        w, h * 0.84f
+                    )
+                    lineTo(w, h * 0.16f)
+
+                    // B: curva superior direita espelhada.
+                    cubicTo(
+                        w * 0.72f, h * 0.06f,
+                        w * 0.82f, 0f,
+                        w, 0f
                     )
                 }
                 close()
@@ -1158,6 +1173,17 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                                 0f, h * 0.98f,
                                 w * 0.62f, h,
                                 w, h
+                            )
+                            cubicTo(
+                                w * 0.82f, h,
+                                w * 0.72f, h * 0.94f,
+                                w, h * 0.84f
+                            )
+                            moveTo(w, h * 0.16f)
+                            cubicTo(
+                                w * 0.72f, h * 0.06f,
+                                w * 0.82f, 0f,
+                                w, 0f
                             )
                         }
                     }
