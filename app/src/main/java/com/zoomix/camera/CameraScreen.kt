@@ -1028,16 +1028,16 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
 
                     // C: curva inferior direita projetada para dentro.
                     cubicTo(
-                        w * 0.82f, h,
-                        w * 0.72f, h * 0.94f,
+                        w * 1.30f, h,
+                        w * 0.70f, h * 0.94f,
                         w, h * 0.84f
                     )
                     lineTo(w, h * 0.16f)
 
                     // B: curva superior direita espelhada.
                     cubicTo(
-                        w * 0.72f, h * 0.06f,
-                        w * 0.82f, 0f,
+                        w * 0.70f, h * 0.06f,
+                        w * 1.30f, 0f,
                         w, 0f
                     )
                 }
@@ -1175,15 +1175,15 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                                 w, h
                             )
                             cubicTo(
-                                w * 0.82f, h,
-                                w * 0.72f, h * 0.94f,
-                                w, h * 0.84f
+                                w * 1.30f, h,
+                        w * 0.70f, h * 0.94f,
+                        w, h * 0.84f
                             )
                             moveTo(w, h * 0.16f)
                             cubicTo(
-                                w * 0.72f, h * 0.06f,
-                                w * 0.82f, 0f,
-                                w, 0f
+                                w * 0.70f, h * 0.06f,
+                        w * 1.30f, 0f,
+                        w, 0f
                             )
                         }
                     }
