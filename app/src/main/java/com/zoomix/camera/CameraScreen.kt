@@ -1012,7 +1012,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     )
                     lineTo(w, h)
                 } else {
-                    // A e D: curvas originais preservadas.
+                    // A e D preservadas; B-C formam um único platô contínuo.
                     moveTo(w, 0f)
                     cubicTo(
                         w * 0.62f, 0f,
@@ -1026,20 +1026,22 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                         w, h
                     )
 
-                    // C: curva inferior direita projetada para dentro.
+                    // C: saída suave da borda para o trecho plano.
+                    lineTo(w, h * 0.82f)
                     cubicTo(
-                        w * 1.30f, h,
-                        w * 0.70f, h * 0.94f,
-                        w, h * 0.84f
+                        w, h * 0.76f,
+                        w * 0.62f, h * 0.76f,
+                        w * 0.62f, h * 0.68f
                     )
-                    lineTo(w, h * 0.16f)
+                    lineTo(w * 0.62f, h * 0.32f)
 
-                    // B: curva superior direita espelhada.
+                    // B: retorno suave à borda, sem uma segunda ondulação.
                     cubicTo(
-                        w * 0.70f, h * 0.06f,
-                        w * 1.30f, 0f,
-                        w, 0f
+                        w * 0.62f, h * 0.24f,
+                        w, h * 0.24f,
+                        w, h * 0.18f
                     )
+                    lineTo(w, 0f)
                 }
                 close()
             }
@@ -1086,62 +1088,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 .width(if (isLandscape) 230.dp else 48.dp)
                 .height(if (isLandscape) 48.dp else 230.dp)
                 .clip(capsuleShape)
-                .background(
-                    if (tier == GlassTier.LEVE) {
-                        if (isLandscape) {
-                            Brush.horizontalGradient(
-                                listOf(Color(0xD90A0A0A), Color(0xD90A0A0A))
-                            )
-                        } else {
-                            Brush.verticalGradient(
-                                listOf(Color(0xD90A0A0A), Color(0xD90A0A0A))
-                            )
-                        }
-                    } else {
-                        if (isLandscape) {
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color(0xB8202938),
-                                    Color(0xD9101724),
-                                    Color(0xB8202938)
-                                )
-                            )
-                        } else {
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color(0xB8202938),
-                                    Color(0xD9101724),
-                                    Color(0xB8202938)
-                                )
-                            )
-                        }
-                    }
-                )
-                .background(
-                    if (tier == GlassTier.COMPLETO) {
-                        if (isLandscape) {
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    Color(0x12FFFFFF),
-                                    Color(0x04FFFFFF)
-                                )
-                            )
-                        } else {
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    Color(0x12FFFFFF),
-                                    Color(0x04FFFFFF)
-                                )
-                            )
-                        }
-                    } else {
-                        Brush.horizontalGradient(
-                            listOf(Color.Transparent, Color.Transparent)
-                        )
-                    }
-                )
+                .background(Color.Black)
                 .drawWithCache {
                     val contour = Path().apply {
                         val w = size.width
@@ -1174,17 +1121,19 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                                 w * 0.62f, h,
                                 w, h
                             )
+                            lineTo(w, h * 0.82f)
                             cubicTo(
-                                w * 1.30f, h,
-                        w * 0.70f, h * 0.94f,
-                        w, h * 0.84f
+                                w, h * 0.76f,
+                                w * 0.62f, h * 0.76f,
+                                w * 0.62f, h * 0.68f
                             )
-                            moveTo(w, h * 0.16f)
+                            lineTo(w * 0.62f, h * 0.32f)
                             cubicTo(
-                                w * 0.70f, h * 0.06f,
-                        w * 1.30f, 0f,
-                        w, 0f
+                                w * 0.62f, h * 0.24f,
+                                w, h * 0.24f,
+                                w, h * 0.18f
                             )
+                            lineTo(w, 0f)
                         }
                     }
 
