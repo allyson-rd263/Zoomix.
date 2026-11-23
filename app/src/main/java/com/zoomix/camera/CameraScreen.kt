@@ -1224,29 +1224,39 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     }
                 }
             } else {
-                Column(
+                Box(
                     Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    Text(
-                        fmtZoom(zc),
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Box(
+                    Column(
                         Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .then(zoomDragModifier),
-                        contentAlignment = Alignment.Center
+                            .width(22.dp)
+                            .fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column(
+                        Text(
+                            fmtZoom(zc),
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+
+                        BoxWithConstraints(
                             Modifier
-                                .width(18.dp)
-                                .fillMaxHeight(0.9f),
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .then(zoomDragModifier),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val verticalIndicatorTravel =
+                                (maxHeight * 0.9f - 5.dp).coerceAtLeast(0.dp)
+
+                            Column(
+                                Modifier
+                                    .width(18.dp)
+                                    .fillMaxHeight(0.9f),
                             verticalArrangement = Arrangement.SpaceBetween,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
@@ -1271,19 +1281,20 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                             }
                         }
 
-                        Box(
-                            Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = 8.dp)
-                                .graphicsLayer {
-                                    translationY =
-                                        (1f - zoomFraction) * 0.9f * 158.dp.toPx()
-                                }
-                                .width(20.dp)
-                                .height(5.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(YELLOW)
-                        )
+                            Box(
+                                Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = 8.dp)
+                                    .graphicsLayer {
+                                        translationY =
+                                            (1f - zoomFraction) * verticalIndicatorTravel.toPx()
+                                    }
+                                    .width(20.dp)
+                                    .height(5.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(YELLOW)
+                            )
+                        }
                     }
                 }
             }
