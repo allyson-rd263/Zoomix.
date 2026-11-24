@@ -1235,7 +1235,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
             } else {
                 Box(
                     Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.CenterStart
+                    contentAlignment = Alignment.CenterEnd
                 ) {
                     Column(
                         Modifier
