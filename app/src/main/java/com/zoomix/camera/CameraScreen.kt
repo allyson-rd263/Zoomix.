@@ -1013,36 +1013,36 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     lineTo(w, h)
                 } else {
                     // Silhueta do SVG aprovado: curvas perfeitamente espelhadas.
-                    moveTo(w, h * 0.5783f)
+                    moveTo(w, h * 0.3291f)
                     cubicTo(
-                        w * 0.9860f, h * 0.5987f,
-                        w * 0.9773f, h * 0.6186f,
-                        w * 0.9460f, h * 0.6265f
+                        w * 0.9720f, h * 0.3699f,
+                        w * 0.9546f, h * 0.4097f,
+                        w * 0.8920f, h * 0.4255f
                     )
                     cubicTo(
-                        w * 0.9167f, h * 0.6348f,
-                        w * 0.8658f, h * 0.6302f,
-                        w * 0.8452f, h * 0.6455f
+                        w * 0.8334f, h * 0.4421f,
+                        w * 0.7316f, h * 0.4329f,
+                        w * 0.6904f, h * 0.4635f
                     )
                     cubicTo(
-                        w * 0.8247f, h * 0.6608f,
-                        w * 0.8355f, h * 0.6956f,
-                        w * 0.8344f, h * 0.7437f
+                        w * 0.6494f, h * 0.4941f,
+                        w * 0.6710f, h * 0.5637f,
+                        w * 0.6688f, h * 0.6599f
                     )
                     cubicTo(
-                        w * 0.8355f, h * 0.7920f,
-                        w * 0.8247f, h * 0.8267f,
-                        w * 0.8452f, h * 0.8420f
+                        w * 0.6710f, h * 0.7565f,
+                        w * 0.6494f, h * 0.8259f,
+                        w * 0.6904f, h * 0.8565f
                     )
                     cubicTo(
-                        w * 0.8658f, h * 0.8573f,
-                        w * 0.9167f, h * 0.8526f,
-                        w * 0.9460f, h * 0.8610f
+                        w * 0.7316f, h * 0.8871f,
+                        w * 0.8334f, h * 0.8777f,
+                        w * 0.8920f, h * 0.8945f
                     )
                     cubicTo(
-                        w * 0.9773f, h * 0.8689f,
-                        w * 0.9860f, h * 0.8888f,
-                        w, h * 0.9092f
+                        w * 0.9546f, h * 0.9103f,
+                        w * 0.9720f, h * 0.9501f,
+                        w, h * 0.9909f
                     )
                 }
                 close()
@@ -1112,36 +1112,36 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                             lineTo(w, h)
                         } else {
                             // Mesma geometria do capsuleShape.
-                            moveTo(w, h * 0.5783f)
+                            moveTo(w, h * 0.3291f)
                             cubicTo(
-                                w * 0.9860f, h * 0.5987f,
-                                w * 0.9773f, h * 0.6186f,
-                                w * 0.9460f, h * 0.6265f
+                                w * 0.9720f, h * 0.3699f,
+                                w * 0.9546f, h * 0.4097f,
+                                w * 0.8920f, h * 0.4255f
                             )
                             cubicTo(
-                                w * 0.9167f, h * 0.6348f,
-                                w * 0.8658f, h * 0.6302f,
-                                w * 0.8452f, h * 0.6455f
+                                w * 0.8334f, h * 0.4421f,
+                                w * 0.7316f, h * 0.4329f,
+                                w * 0.6904f, h * 0.4635f
                             )
                             cubicTo(
-                                w * 0.8247f, h * 0.6608f,
-                                w * 0.8355f, h * 0.6956f,
-                                w * 0.8344f, h * 0.7437f
+                                w * 0.6494f, h * 0.4941f,
+                                w * 0.6710f, h * 0.5637f,
+                                w * 0.6688f, h * 0.6599f
                             )
                             cubicTo(
-                                w * 0.8355f, h * 0.7920f,
-                                w * 0.8247f, h * 0.8267f,
-                                w * 0.8452f, h * 0.8420f
+                                w * 0.6710f, h * 0.7565f,
+                                w * 0.6494f, h * 0.8259f,
+                                w * 0.6904f, h * 0.8565f
                             )
                             cubicTo(
-                                w * 0.8658f, h * 0.8573f,
-                                w * 0.9167f, h * 0.8526f,
-                                w * 0.9460f, h * 0.8610f
+                                w * 0.7316f, h * 0.8871f,
+                                w * 0.8334f, h * 0.8777f,
+                                w * 0.8920f, h * 0.8945f
                             )
                             cubicTo(
-                                w * 0.9773f, h * 0.8689f,
-                                w * 0.9860f, h * 0.8888f,
-                                w, h * 0.9092f
+                                w * 0.9546f, h * 0.9103f,
+                                w * 0.9720f, h * 0.9501f,
+                                w, h * 0.9909f
                             )
                         }
                     }
