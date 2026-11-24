@@ -1165,7 +1165,7 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     horizontal = if (isLandscape) 12.dp else 7.dp,
                     vertical = if (isLandscape) 7.dp else 12.dp
                 ),
-            contentAlignment = Alignment.Center
+            contentAlignment = if (isLandscape) Alignment.Center else Alignment.CenterEnd
         ) {
             if (isLandscape) {
                 Row(
