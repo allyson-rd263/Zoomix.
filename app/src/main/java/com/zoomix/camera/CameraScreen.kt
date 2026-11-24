@@ -1087,8 +1087,8 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 .align(Alignment.BottomEnd)
                 .padding(end = 0.dp, bottom = 125.dp)
                 .graphicsLayer { translationX = capsuleOffset.toPx() }
-                .width(if (isLandscape) 230.dp else 48.dp)
-                .height(if (isLandscape) 48.dp else 230.dp)
+                .width(if (isLandscape) 230.dp else 60.dp)
+                .height(if (isLandscape) 48.dp else 290.dp)
                 .clip(capsuleShape)
                 .background(Color.Black)
                 .drawWithCache {
