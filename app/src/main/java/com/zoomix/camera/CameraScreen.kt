@@ -1013,27 +1013,27 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     lineTo(w, h)
                 } else {
                     // Silhueta portrait: curvas A e D, borda direita reta.
-                    moveTo(w, h * 0.20f)
+                    moveTo(w, h * 0.25f)
                     cubicTo(
-                        w * 0.94f, h * 0.30f,
-                        w * 0.62f, h * 0.34f,
-                        w * 0.28f, h * 0.37f
+                        w * 0.94f, h * 0.31f,
+                        w * 0.62f, h * 0.35f,
+                        w * 0.28f, h * 0.38f
                     )
                     cubicTo(
-                        w * 0.12f, h * 0.385f,
-                        0f, h * 0.40f,
-                        0f, h * 0.43f
+                        w * 0.12f, h * 0.395f,
+                        0f, h * 0.39f,
+                        0f, h * 0.40f
                     )
-                    lineTo(0f, h * 0.57f)
+                    lineTo(0f, h * 0.60f)
                     cubicTo(
                         0f, h * 0.60f,
-                        w * 0.12f, h * 0.615f,
-                        w * 0.28f, h * 0.63f
+                        w * 0.12f, h * 0.605f,
+                        w * 0.28f, h * 0.62f
                     )
                     cubicTo(
-                        w * 0.62f, h * 0.66f,
-                        w * 0.94f, h * 0.70f,
-                        w, h * 0.80f
+                        w * 0.62f, h * 0.65f,
+                        w * 0.94f, h * 0.69f,
+                        w, h * 0.75f
                     )
                 }
                 close()
@@ -1102,27 +1102,27 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                             )
                             lineTo(w, h)
                         } else {
-                            moveTo(w, h * 0.20f)
+                            moveTo(w, h * 0.25f)
                             cubicTo(
-                                w * 0.94f, h * 0.30f,
-                                w * 0.62f, h * 0.34f,
-                                w * 0.28f, h * 0.37f
+                                w * 0.94f, h * 0.31f,
+                                w * 0.62f, h * 0.35f,
+                                w * 0.28f, h * 0.38f
                             )
                             cubicTo(
-                                w * 0.12f, h * 0.385f,
-                                0f, h * 0.40f,
-                                0f, h * 0.43f
+                                w * 0.12f, h * 0.395f,
+                                0f, h * 0.39f,
+                                0f, h * 0.40f
                             )
-                            lineTo(0f, h * 0.57f)
+                            lineTo(0f, h * 0.60f)
                             cubicTo(
                                 0f, h * 0.60f,
-                                w * 0.12f, h * 0.615f,
-                                w * 0.28f, h * 0.63f
+                                w * 0.12f, h * 0.605f,
+                                w * 0.28f, h * 0.62f
                             )
                             cubicTo(
-                                w * 0.62f, h * 0.66f,
-                                w * 0.94f, h * 0.70f,
-                                w, h * 0.80f
+                                w * 0.62f, h * 0.65f,
+                                w * 0.94f, h * 0.69f,
+                                w, h * 0.75f
                             )
                         }
                     }
