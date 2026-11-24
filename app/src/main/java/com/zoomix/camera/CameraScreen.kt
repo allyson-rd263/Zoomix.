@@ -1014,32 +1014,32 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 } else {
                     // A e D preservadas; B-C formam um único platô contínuo.
                     moveTo(w, 0f)
+                    lineTo(w, h)
+                    lineTo(w * 0.647f, h)
                     cubicTo(
-                        w * 0.62f, 0f,
-                        w * 0.06f, h * 0.02f,
-                        0f, h * 0.16f
+                        w * 0.647f, h,
+                        w * 0.603f, h,
+                        w * 0.603f, h * 0.951f
                     )
-                    lineTo(0f, h * 0.84f)
+                    lineTo(w * 0.603f, h * 0.761f)
                     cubicTo(
-                        0f, h * 0.98f,
-                        w * 0.62f, h,
-                        w, h
+                        w * 0.603f, h * 0.715f,
+                        w * 0.456f, h * 0.690f,
+                        w * 0.206f, h * 0.690f
                     )
-
-                    // C: saída suave da borda para o trecho plano.
-                    lineTo(w, h * 0.82f)
+                    lineTo(0f, h * 0.690f)
+                    lineTo(0f, h * 0.310f)
+                    lineTo(w * 0.206f, h * 0.310f)
                     cubicTo(
-                        w, h * 0.76f,
-                        w * 0.62f, h * 0.76f,
-                        w * 0.62f, h * 0.68f
+                        w * 0.456f, h * 0.310f,
+                        w * 0.603f, h * 0.285f,
+                        w * 0.603f, h * 0.239f
                     )
-                    lineTo(w * 0.62f, h * 0.32f)
-
-                    // B: retorno suave à borda, sem uma segunda ondulação.
+                    lineTo(w * 0.603f, h * 0.049f)
                     cubicTo(
-                        w * 0.62f, h * 0.24f,
-                        w, h * 0.24f,
-                        w, h * 0.18f
+                        w * 0.603f, 0f,
+                        w * 0.647f, 0f,
+                        w * 0.647f, 0f
                     )
                     lineTo(w, 0f)
                 }
@@ -1110,28 +1110,32 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                             lineTo(w, h)
                         } else {
                             moveTo(w, 0f)
+                            lineTo(w, h)
+                            lineTo(w * 0.647f, h)
                             cubicTo(
-                                w * 0.62f, 0f,
-                                w * 0.06f, h * 0.02f,
-                                0f, h * 0.16f
+                                w * 0.647f, h,
+                                w * 0.603f, h,
+                                w * 0.603f, h * 0.951f
                             )
-                            lineTo(0f, h * 0.84f)
+                            lineTo(w * 0.603f, h * 0.761f)
                             cubicTo(
-                                0f, h * 0.98f,
-                                w * 0.62f, h,
-                                w, h
+                                w * 0.603f, h * 0.715f,
+                                w * 0.456f, h * 0.690f,
+                                w * 0.206f, h * 0.690f
                             )
-                            lineTo(w, h * 0.82f)
+                            lineTo(0f, h * 0.690f)
+                            lineTo(0f, h * 0.310f)
+                            lineTo(w * 0.206f, h * 0.310f)
                             cubicTo(
-                                w, h * 0.76f,
-                                w * 0.62f, h * 0.76f,
-                                w * 0.62f, h * 0.68f
+                                w * 0.456f, h * 0.310f,
+                                w * 0.603f, h * 0.285f,
+                                w * 0.603f, h * 0.239f
                             )
-                            lineTo(w * 0.62f, h * 0.32f)
+                            lineTo(w * 0.603f, h * 0.049f)
                             cubicTo(
-                                w * 0.62f, h * 0.24f,
-                                w, h * 0.24f,
-                                w, h * 0.18f
+                                w * 0.603f, 0f,
+                                w * 0.647f, 0f,
+                                w * 0.647f, 0f
                             )
                             lineTo(w, 0f)
                         }
