@@ -980,8 +980,10 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         val isLandscape =
             LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+        val zoomRange = (maxZoom / hwMin).coerceAtLeast(1f)
+
         val zoomFraction = if (hwMin > 0f && maxZoom > hwMin) {
-            (ln(zc / hwMin) / ln(maxZoom / hwMin)).coerceIn(0f, 1f)
+            (ln(zc / hwMin) / ln(zoomRange)).coerceIn(0f, 1f)
         } else {
             0f
         }
@@ -1056,15 +1058,18 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 size.height.toFloat().coerceAtLeast(1f)
             }
             val range = (maxZoom / hwMin).coerceAtLeast(1f)
+            var dragStartY = 0f
+            var dragStartFraction = 0f
+
+            fun currentZoomFraction(): Float {
+                if (range <= 1f) return 0f
+                val current = zoom.coerceIn(hwMin, max(maxZoom, hwMin))
+                return (ln(current / hwMin) / ln(range)).coerceIn(0f, 1f)
+            }
 
             fun updateFromPosition(position: Offset) {
-                val fraction = if (isLandscape) {
-                    val usableLength = (trackLength - 5.dp.toPx()).coerceAtLeast(1f)
-                    (position.x / usableLength).coerceIn(0f, 1f)
-                } else {
-                    (1f - position.y / trackLength).coerceIn(0f, 1f)
-                }
-
+                val usableLength = (trackLength - 5.dp.toPx()).coerceAtLeast(1f)
+                val fraction = (position.x / usableLength).coerceIn(0f, 1f)
                 zoom = (hwMin * range.pow(fraction))
                     .coerceIn(hwMin, max(maxZoom, hwMin))
             }
@@ -1072,12 +1077,28 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
             detectDragGestures(
                 onDragStart = { position ->
                     zoomInteraction++
-                    updateFromPosition(position)
+                    if (isLandscape) {
+                        updateFromPosition(position)
+                    } else {
+                        dragStartY = position.y
+                        dragStartFraction = currentZoomFraction()
+                    }
                 },
                 onDrag = { change, _ ->
                     change.consume()
                     zoomInteraction++
-                    updateFromPosition(change.position)
+                    if (isLandscape) {
+                        updateFromPosition(change.position)
+                    } else {
+                        val dragLength = (trackLength * 0.76f).coerceAtLeast(1f)
+                        val fraction = (
+                            dragStartFraction -
+                                (change.position.y - dragStartY) / dragLength
+                            ).coerceIn(0f, 1f)
+
+                        zoom = (hwMin * range.pow(fraction))
+                            .coerceIn(hwMin, max(maxZoom, hwMin))
+                    }
                 }
             )
         }
@@ -1237,67 +1258,72 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     Modifier.fillMaxSize(),
                     contentAlignment = Alignment.CenterEnd
                 ) {
-                    Column(
+                    BoxWithConstraints(
                         Modifier
                             .width(22.dp)
-                            .fillMaxHeight(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .fillMaxHeight()
+                            .then(zoomDragModifier),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            fmtZoom(zc),
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
-                        )
+                        val viewportHeight = maxHeight * 0.38f
+                        val scaleHeight = viewportHeight * 2f
 
-                        BoxWithConstraints(
+                        Box(
                             Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .then(zoomDragModifier),
+                                .align(Alignment.Center)
+                                .graphicsLayer {
+                                    translationY = maxHeight.toPx() * 0.16f
+                                }
+                                .width(22.dp)
+                                .height(viewportHeight)
+                                .clip(RoundedCornerShape(0.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            val verticalIndicatorTravel =
-                                (maxHeight * 0.9f - 5.dp).coerceAtLeast(0.dp)
-
                             Column(
                                 Modifier
-                                    .width(18.dp)
-                                    .fillMaxHeight(0.9f),
-                            verticalArrangement = Arrangement.SpaceBetween,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            repeat(11) { index ->
-                                val tickWidth = when {
-                                    index % 5 == 0 -> 14.dp
-                                    index % 2 == 0 -> 9.dp
-                                    else -> 5.dp
-                                }
-                                val tickColor = if (index % 5 == 0) {
-                                    Color(0xB3FFFFFF)
-                                } else {
-                                    Color(0x66FFFFFF)
-                                }
+                                    .width(22.dp)
+                                    .height(scaleHeight)
+                                    .graphicsLayer {
+                                        translationY =
+                                            (0.5f - zoomFraction) * scaleHeight.toPx()
+                                    },
+                                verticalArrangement = Arrangement.SpaceBetween,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                repeat(21) { index ->
+                                    val tickFraction = index / 20f
+                                    val tickZoom = hwMin * zoomRange.pow(tickFraction)
 
-                                Box(
-                                    Modifier
-                                        .width(tickWidth)
-                                        .height(1.dp)
-                                        .background(tickColor)
-                                )
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(14.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (index % 5 == 0) {
+                                            Text(
+                                                fmtZoom(tickZoom),
+                                                color = Color.White,
+                                                fontSize = 7.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 1
+                                            )
+                                        } else {
+                                            val tickWidth = if (index % 2 == 0) 9.dp else 5.dp
+                                            Box(
+                                                Modifier
+                                                    .width(tickWidth)
+                                                    .height(1.dp)
+                                                    .background(Color(0x99FFFFFF))
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                        }
 
                             Box(
                                 Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(top = 8.dp)
-                                    .graphicsLayer {
-                                        translationY =
-                                            (1f - zoomFraction) * verticalIndicatorTravel.toPx()
-                                    }
+                                    .align(Alignment.Center)
                                     .width(20.dp)
                                     .height(5.dp)
                                     .clip(RoundedCornerShape(50))
