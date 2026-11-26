@@ -263,7 +263,12 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
         }
     }
 
-    val previewView = remember { PreviewView(ctx).apply { keepScreenOn = true } }
+    val previewView = remember {
+        PreviewView(ctx).apply {
+            keepScreenOn = true
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+    }
     val ioExecutor = remember { Executors.newSingleThreadExecutor() }
     val workExecutor = remember { Executors.newSingleThreadExecutor() }
 
