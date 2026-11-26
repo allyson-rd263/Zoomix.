@@ -1,5 +1,13 @@
 package com.zoomix.camera
 
+import androidx.camera.core.ViewPort
+
+import androidx.camera.core.UseCaseGroup
+
+import androidx.camera.core.CameraEffect
+
+import android.util.Rational
+
 import android.Manifest
 import android.content.Context
 import android.content.ContextWrapper
@@ -408,9 +416,39 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     videoCapture = vc
                 }
                 Cam.VIDEO -> {
-                    val vc = newVideo(live = false).also {
-                        camera = p.bindToLifecycle(lifecycleOwner, selector, newPreview(), it)
+                    val preview = newPreview()
+                    val vc = newVideo(live = false)
+
+                    val processor = ZoomixSurfaceProcessor { error ->
+                        mainExecutor.execute {
+                            status = "Erro no processador de vídeo: ${error.message}"
+                        }
                     }
+
+                    val effect = ZoomixCameraEffect(
+                        CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE,
+                        processor
+                    ) { error ->
+                        mainExecutor.execute {
+                            status = "Erro no efeito de câmera: ${error.message}"
+                        }
+                    }
+
+                    val viewPort = ViewPort.Builder(
+                        Rational(16, 9),
+                        targetRotation
+                    )
+                        .setScaleType(ViewPort.FIT)
+                        .build()
+
+                    val group = UseCaseGroup.Builder()
+                        .setViewPort(viewPort)
+                        .addUseCase(preview)
+                        .addUseCase(vc)
+                        .addEffect(effect)
+                        .build()
+
+                    camera = p.bindToLifecycle(lifecycleOwner, selector, group)
                     imageCapture = null
                     videoCapture = vc
                 }
