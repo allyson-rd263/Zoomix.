@@ -460,6 +460,11 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 }
             }
         } catch (e: Exception) {
+            android.util.Log.e(
+                "ZoomixCamera",
+                "Falha ao configurar modo ${cam.label}",
+                e
+            )
             when {
                 lensId != null -> {
                     status = "Esta lente não pôde ser usada neste modo"
