@@ -8,6 +8,7 @@ import android.opengl.GLES20
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
+import android.util.Log
 import androidx.camera.core.ProcessingException
 import androidx.camera.core.SurfaceOutput
 import androidx.camera.core.SurfaceProcessor
@@ -28,6 +29,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ZoomixSurfaceProcessor(
     private val onError: (Throwable) -> Unit
 ) : SurfaceProcessor, SurfaceTexture.OnFrameAvailableListener, AutoCloseable {
+
+    companion object {
+        private const val TAG = "ZoomixSurfaceProcessor"
+    }
 
     private val thread = HandlerThread("Zoomix-GL").apply { start() }
     private val handler = Handler(thread.looper)
@@ -61,11 +66,13 @@ class ZoomixSurfaceProcessor(
         val surface: Surface,
         val eglSurface: android.opengl.EGLSurface,
         val width: Int,
-        val height: Int
+        val height: Int,
+        val targets: Int
     )
 
     private val inputs = LinkedHashMap<SurfaceTexture, Input>()
     private val outputs = LinkedHashMap<SurfaceOutput, Output>()
+    private val firstFrameOutputs = HashSet<SurfaceOutput>()
 
     private var activeInput: SurfaceTexture? = null
 
@@ -95,6 +102,7 @@ class ZoomixSurfaceProcessor(
         var createdSurface: Surface? = null
 
         try {
+            Log.i(TAG, "Solicitação de entrada: ${request.resolution.width}x${request.resolution.height}")
             initializeGl()
 
             textureId = createExternalTexture()
@@ -120,9 +128,11 @@ class ZoomixSurfaceProcessor(
 
             request.provideSurface(inputSurface, executor) {
                 handler.post {
+                    Log.i(TAG, "CameraX liberou a superfície de entrada")
                     releaseInput(inputTexture)
                 }
             }
+            Log.i(TAG, "Superfície de entrada fornecida ao CameraX")
         } catch (error: Throwable) {
             val inputTexture = createdTexture
 
@@ -165,7 +175,7 @@ class ZoomixSurfaceProcessor(
             }
 
             checkReadyToRelease()
-            throw ProcessingException()
+            throw ProcessingException().apply { initCause(error) }
         }
     }
 
@@ -182,6 +192,7 @@ class ZoomixSurfaceProcessor(
 
             val outputSurface = surfaceOutput.getSurface(executor) { event ->
                 if (event.eventCode == SurfaceOutput.Event.EVENT_REQUEST_CLOSE) {
+                    Log.i(TAG, "CameraX solicitou fechamento da saída: targets=${event.surfaceOutput.targets}")
                     handler.post {
                         releaseOutput(event.surfaceOutput)
                     }
@@ -189,6 +200,8 @@ class ZoomixSurfaceProcessor(
             }
 
             val size = surfaceOutput.size
+            val targets = surfaceOutput.targets
+            Log.i(TAG, "Saída recebida: targets=$targets, ${size.width}x${size.height}")
 
             createdEglSurface = EGL14.eglCreateWindowSurface(
                 display,
@@ -206,8 +219,10 @@ class ZoomixSurfaceProcessor(
                 surface = outputSurface,
                 eglSurface = createdEglSurface,
                 width = size.width,
-                height = size.height
+                height = size.height,
+                targets = targets
             )
+            Log.i(TAG, "Superfície EGL de saída criada: targets=$targets")
         } catch (error: Throwable) {
             if (
                 createdEglSurface != EGL14.EGL_NO_SURFACE &&
@@ -236,7 +251,7 @@ class ZoomixSurfaceProcessor(
             }
 
             checkReadyToRelease()
-            throw ProcessingException()
+            throw ProcessingException().apply { initCause(error) }
         }
     }
 
@@ -293,6 +308,8 @@ class ZoomixSurfaceProcessor(
 
     private fun releaseOutput(surfaceOutput: SurfaceOutput) {
         val output = outputs.remove(surfaceOutput) ?: return
+        firstFrameOutputs.remove(surfaceOutput)
+        Log.i(TAG, "Liberando saída: targets=${output.targets}")
 
         if (display != EGL14.EGL_NO_DISPLAY) {
             if (
@@ -377,7 +394,7 @@ class ZoomixSurfaceProcessor(
                 ) {
                     reportError(
                         IllegalStateException(
-                            "Falha ao ativar EGL de saída: ${EGL14.eglGetError()}"
+                            "Falha ao ativar EGL de saída (targets=${output.targets}): ${EGL14.eglGetError()}"
                         )
                     )
                     return@forEach
@@ -395,6 +412,18 @@ class ZoomixSurfaceProcessor(
                     textureMatrix
                 )
 
+                if (firstFrameOutputs.add(surfaceOutput)) {
+                    // Determinante negativo indica reflexão na transformação 2D.
+                    val determinant =
+                        outputMatrix[0] * outputMatrix[5] - outputMatrix[4] * outputMatrix[1]
+                    Log.i(
+                        TAG,
+                        "Primeiro frame: targets=${output.targets}, det=$determinant, " +
+                            "m0=${outputMatrix[0]}, m1=${outputMatrix[1]}, " +
+                            "m4=${outputMatrix[4]}, m5=${outputMatrix[5]}"
+                    )
+                }
+
                 drawFrame(
                     matrix = outputMatrix,
                     textureId = input.textureId
@@ -409,7 +438,7 @@ class ZoomixSurfaceProcessor(
                 if (!EGL14.eglSwapBuffers(display, output.eglSurface)) {
                     reportError(
                         IllegalStateException(
-                            "Falha ao enviar frame EGL: ${EGL14.eglGetError()}"
+                            "Falha ao enviar frame EGL (targets=${output.targets}): ${EGL14.eglGetError()}"
                         )
                     )
                 }
@@ -774,6 +803,7 @@ class ZoomixSurfaceProcessor(
             }
 
     private fun reportError(error: Throwable) {
+        Log.e(TAG, "Falha no pipeline OpenGL", error)
         try {
             onError(error)
         } catch (_: Throwable) {

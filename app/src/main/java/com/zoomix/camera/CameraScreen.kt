@@ -287,6 +287,8 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
     }
     var status by remember { mutableStateOf("") }
     var recording by remember { mutableStateOf<Recording?>(null) }
+    // Reutiliza o processador entre entradas/saídas do modo Vídeo. CameraX não o fecha.
+    var videoProcessor by remember { mutableStateOf<ZoomixSurfaceProcessor?>(null) }
     var recSeconds by remember { mutableStateOf(0) }
     var liveBusy by remember { mutableStateOf(false) }
     var photoBusy by remember { mutableStateOf(false) }
@@ -334,6 +336,10 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                 if (future.isDone) future.get().unbindAll()
             } catch (_: Exception) {
             }
+            // SurfaceProcessorWithExecutor.release() é no-op para processadores externos.
+            // O app é responsável por encerrar a thread EGL ao sair da tela da câmera.
+            videoProcessor?.close()
+            videoProcessor = null
         }
     }
 
@@ -419,11 +425,11 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     val preview = newPreview()
                     val vc = newVideo(live = false)
 
-                    val processor = ZoomixSurfaceProcessor { error ->
+                    val processor = videoProcessor ?: ZoomixSurfaceProcessor { error ->
                         mainExecutor.execute {
                             status = "Erro no processador de vídeo: ${error.message}"
                         }
-                    }
+                    }.also { videoProcessor = it }
 
                     val effect = ZoomixCameraEffect(
                         CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE,
