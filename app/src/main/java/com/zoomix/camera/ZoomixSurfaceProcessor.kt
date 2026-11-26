@@ -413,17 +413,19 @@ class ZoomixSurfaceProcessor(
                 )
 
                 if (firstFrameOutputs.add(surfaceOutput)) {
-                    // Determinante negativo indica reflexão na transformação 2D.
                     val determinant =
-                        outputMatrix[0] * outputMatrix[5] - outputMatrix[4] * outputMatrix[1]
+                        outputMatrix[0] * outputMatrix[5] -
+                        outputMatrix[4] * outputMatrix[1]
+
                     Log.i(
                         TAG,
-                        "Primeiro frame: targets=${output.targets}, det=$determinant, " +
-                            "m0=${outputMatrix[0]}, m1=${outputMatrix[1]}, " +
-                            "m4=${outputMatrix[4]}, m5=${outputMatrix[5]}"
+                        "Primeiro frame: targets=${output.targets}, " +
+                            "resolucao=${output.width}x${output.height}, " +
+                            "det=$determinant, " +
+                            "output=${outputMatrix.contentToString()}, " +
+                            "texture=${textureMatrix.contentToString()}"
                     )
                 }
-
                 drawFrame(
                     matrix = outputMatrix,
                     textureId = input.textureId
