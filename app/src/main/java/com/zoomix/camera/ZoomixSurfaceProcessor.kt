@@ -181,7 +181,7 @@ class ZoomixSurfaceProcessor(
             initializeGl()
 
             val outputSurface = surfaceOutput.getSurface(executor) { event ->
-                if (event.eventCode == SurfaceOutput.EVENT_REQUEST_CLOSE) {
+                if (event.eventCode == SurfaceOutput.Event.EVENT_REQUEST_CLOSE) {
                     handler.post {
                         releaseOutput(event.surfaceOutput)
                     }
