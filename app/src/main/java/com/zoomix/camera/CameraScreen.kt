@@ -430,21 +430,6 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                     val preview = newPreview()
                     val vc = newVideo(live = false)
 
-                    val processor = videoProcessor ?: ZoomixSurfaceProcessor { error ->
-                        mainExecutor.execute {
-                            status = "Erro no processador de vídeo: ${error.message}"
-                        }
-                    }.also { videoProcessor = it }
-
-                    val effect = ZoomixCameraEffect(
-                        CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE,
-                        processor
-                    ) { error ->
-                        mainExecutor.execute {
-                            status = "Erro no efeito de câmera: ${error.message}"
-                        }
-                    }
-
                     val viewPort = ViewPort.Builder(
                         Rational(16, 9),
                         targetRotation
@@ -456,7 +441,6 @@ fun CameraScreen(onOpenSettings: () -> Unit) {
                         .setViewPort(viewPort)
                         .addUseCase(preview)
                         .addUseCase(vc)
-                        .addEffect(effect)
                         .build()
 
                     camera = p.bindToLifecycle(lifecycleOwner, selector, group)
