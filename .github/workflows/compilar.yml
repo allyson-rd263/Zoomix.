@@ -38,6 +38,9 @@ jobs:
           yes | sdkmanager --licenses
           sdkmanager 'platform-tools' 'platforms;android-34' 'build-tools;34.0.0'
 
+      - name: Executar testes unitários
+        run: gradle --no-daemon testDebugUnitTest
+
       - name: Compilar APK de teste
         run: gradle --no-daemon assembleDebug
 
