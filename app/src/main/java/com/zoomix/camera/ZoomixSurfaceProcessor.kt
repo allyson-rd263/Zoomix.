@@ -84,10 +84,10 @@ class ZoomixSurfaceProcessor(
 
     private val vertices = floatBuffer(
         floatArrayOf(
-            -1f, -1f, 0f, 1f,
-             1f, -1f, 1f, 1f,
-            -1f,  1f, 0f, 0f,
-             1f,  1f, 1f, 0f
+            -1f, -1f, 0f, 0f,
+             1f, -1f, 1f, 0f,
+            -1f,  1f, 0f, 1f,
+             1f,  1f, 1f, 1f
         )
     )
 
