@@ -5,6 +5,7 @@ import android.opengl.EGL14
 import android.opengl.EGLExt
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
+import android.opengl.GLES30
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
@@ -24,14 +25,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Pipeline OpenGL de passagem dos frames do CameraX.
  *
  * Cada entrada possui sua própria textura OES.
- * Nesta etapa, nenhum efeito visual ou estabilização é aplicado.
+ * Aplica compensação eletrônica por análise de movimento dos quadros na GPU.
  */
 class ZoomixSurfaceProcessor(
+    private val eisEnabled: Boolean = true,
     private val onError: (Throwable) -> Unit
 ) : SurfaceProcessor, SurfaceTexture.OnFrameAvailableListener, AutoCloseable {
 
     companion object {
         private const val TAG = "ZoomixSurfaceProcessor"
+        private const val ANALYSIS_WIDTH = 160
+        private const val ANALYSIS_HEIGHT = 90
+        private const val ANALYSIS_BYTES = ANALYSIS_WIDTH * ANALYSIS_HEIGHT * 4
     }
 
     private val thread = HandlerThread("Zoomix-GL").apply { start() }
@@ -55,6 +60,26 @@ class ZoomixSurfaceProcessor(
     private var texCoordLocation = -1
     private var transformLocation = -1
     private var samplerLocation = -1
+    private var eisOffsetLocation = -1
+    private var eisScaleLocation = -1
+
+    private var eisActive = eisEnabled
+    private var analysisTexture = 0
+    private var analysisFramebuffer = 0
+    private val analysisPbos = IntArray(2)
+    private var analysisPendingIndex = -1
+    private var analysisWriteIndex = 0
+
+    private val motionEstimator = ZoomixMotionEstimator(
+        width = ANALYSIS_WIDTH,
+        height = ANALYSIS_HEIGHT
+    )
+    private val eisController = ZoomixEisController(
+        width = ANALYSIS_WIDTH,
+        height = ANALYSIS_HEIGHT,
+        maxShift = 2f
+    )
+    private var eisCorrection = eisController.reset()
 
     private data class Input(
         val textureId: Int,
@@ -382,6 +407,17 @@ class ZoomixSurfaceProcessor(
 
             val timestamp = surfaceTexture.timestamp
 
+            if (eisActive) {
+                try {
+                    analyzeFrame(input.textureId)
+                } catch (error: Throwable) {
+                    Log.e(TAG, "EIS desativado após falha na análise", error)
+                    deleteAnalysisResources()
+                    eisActive = false
+                    eisCorrection = eisController.reset()
+                }
+            }
+
             outputs.toList().forEach { (surfaceOutput, output) ->
 
                 if (
@@ -428,7 +464,8 @@ class ZoomixSurfaceProcessor(
                 }
                 drawFrame(
                     matrix = outputMatrix,
-                    textureId = input.textureId
+                    textureId = input.textureId,
+                    correction = if (eisActive) eisCorrection else null
                 )
 
                 EGLExt.eglPresentationTimeANDROID(
@@ -474,7 +511,7 @@ class ZoomixSurfaceProcessor(
                 EGL14.EGL_GREEN_SIZE, 8,
                 EGL14.EGL_BLUE_SIZE, 8,
                 EGL14.EGL_ALPHA_SIZE, 8,
-                EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                EGL14.EGL_RENDERABLE_TYPE, 0x0040, // EGL_OPENGL_ES3_BIT_KHR
                 EGL14.EGL_SURFACE_TYPE,
                 EGL14.EGL_WINDOW_BIT or EGL14.EGL_PBUFFER_BIT,
                 0x3142, 1,
@@ -500,7 +537,7 @@ class ZoomixSurfaceProcessor(
                 config,
                 EGL14.EGL_NO_CONTEXT,
                 intArrayOf(
-                    EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
+                    EGL14.EGL_CONTEXT_CLIENT_VERSION, 3,
                     EGL14.EGL_NONE
                 ),
                 0
@@ -532,6 +569,17 @@ class ZoomixSurfaceProcessor(
             }
 
             program = createProgram()
+
+            if (eisActive) {
+                try {
+                    initializeAnalysisResources()
+                } catch (error: Throwable) {
+                    deleteAnalysisResources()
+                    eisActive = false
+                    eisCorrection = eisController.reset()
+                    Log.w(TAG, "EIS desativado: falha ao preparar análise de quadros", error)
+                }
+            }
         } catch (error: Throwable) {
             cleanupEglAfterInitializationFailure()
             throw error
@@ -550,8 +598,9 @@ class ZoomixSurfaceProcessor(
                     display, pbuffer, pbuffer, context
                 )
 
-                if (contextCurrent && program != 0) {
-                    GLES20.glDeleteProgram(program)
+                if (contextCurrent) {
+                    deleteAnalysisResources()
+                    if (program != 0) GLES20.glDeleteProgram(program)
                 }
             }
 
@@ -641,7 +690,8 @@ class ZoomixSurfaceProcessor(
 
     private fun drawFrame(
         matrix: FloatArray,
-        textureId: Int
+        textureId: Int,
+        correction: ZoomixEisController.Correction? = null
     ) {
         GLES20.glUseProgram(program)
 
@@ -667,6 +717,15 @@ class ZoomixSurfaceProcessor(
         )
 
         GLES20.glUniformMatrix4fv(transform, 1, false, matrix, 0)
+        GLES20.glUniform2f(
+            eisOffsetLocation,
+            correction?.offsetX ?: 0f,
+            correction?.offsetY ?: 0f
+        )
+        GLES20.glUniform1f(
+            eisScaleLocation,
+            correction?.cropScale ?: 1f
+        )
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(
             GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
@@ -679,6 +738,247 @@ class ZoomixSurfaceProcessor(
         GLES20.glDisableVertexAttribArray(texCoord)
     }
 
+    private fun initializeAnalysisResources() {
+        check(eisActive) { "EIS não está habilitado" }
+
+        val textures = IntArray(1)
+        GLES20.glGenTextures(1, textures, 0)
+        analysisTexture = textures[0]
+        check(analysisTexture != 0) { "Falha ao criar textura de análise" }
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, analysisTexture)
+        GLES20.glTexParameteri(
+            GLES20.GL_TEXTURE_2D,
+            GLES20.GL_TEXTURE_MIN_FILTER,
+            GLES20.GL_LINEAR
+        )
+        GLES20.glTexParameteri(
+            GLES20.GL_TEXTURE_2D,
+            GLES20.GL_TEXTURE_MAG_FILTER,
+            GLES20.GL_LINEAR
+        )
+        GLES20.glTexParameteri(
+            GLES20.GL_TEXTURE_2D,
+            GLES20.GL_TEXTURE_WRAP_S,
+            GLES20.GL_CLAMP_TO_EDGE
+        )
+        GLES20.glTexParameteri(
+            GLES20.GL_TEXTURE_2D,
+            GLES20.GL_TEXTURE_WRAP_T,
+            GLES20.GL_CLAMP_TO_EDGE
+        )
+        GLES20.glTexImage2D(
+            GLES20.GL_TEXTURE_2D,
+            0,
+            GLES20.GL_RGBA,
+            ANALYSIS_WIDTH,
+            ANALYSIS_HEIGHT,
+            0,
+            GLES20.GL_RGBA,
+            GLES20.GL_UNSIGNED_BYTE,
+            null
+        )
+
+        val framebuffers = IntArray(1)
+        GLES20.glGenFramebuffers(1, framebuffers, 0)
+        analysisFramebuffer = framebuffers[0]
+        check(analysisFramebuffer != 0) { "Falha ao criar framebuffer de análise" }
+
+        GLES20.glBindFramebuffer(
+            GLES20.GL_FRAMEBUFFER,
+            analysisFramebuffer
+        )
+        GLES20.glFramebufferTexture2D(
+            GLES20.GL_FRAMEBUFFER,
+            GLES20.GL_COLOR_ATTACHMENT0,
+            GLES20.GL_TEXTURE_2D,
+            analysisTexture,
+            0
+        )
+        check(
+            GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER) ==
+                GLES20.GL_FRAMEBUFFER_COMPLETE
+        ) { "Framebuffer de análise incompleto" }
+
+        GLES30.glGenBuffers(2, analysisPbos, 0)
+        check(analysisPbos.all { it != 0 }) { "Falha ao criar PBOs de análise" }
+
+        analysisPbos.forEach { buffer ->
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, buffer)
+            GLES30.glBufferData(
+                GLES30.GL_PIXEL_PACK_BUFFER,
+                ANALYSIS_BYTES,
+                null,
+                GLES30.GL_STREAM_READ
+            )
+        }
+
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
+
+        checkGlError("inicialização dos recursos de análise")
+        analysisPendingIndex = -1
+        analysisWriteIndex = 0
+        motionEstimator.reset()
+        eisCorrection = eisController.reset()
+        Log.i(TAG, "Análise EIS preparada: ${ANALYSIS_WIDTH}x${ANALYSIS_HEIGHT}, PBO duplo")
+    }
+
+    private fun analyzeFrame(textureId: Int) {
+        if (analysisFramebuffer == 0 || analysisPbos.any { it == 0 }) {
+            throw IllegalStateException("Recursos de análise indisponíveis")
+        }
+
+        try {
+            if (analysisPendingIndex >= 0) {
+                GLES30.glBindBuffer(
+                    GLES30.GL_PIXEL_PACK_BUFFER,
+                    analysisPbos[analysisPendingIndex]
+                )
+
+                val mapped = GLES30.glMapBufferRange(
+                    GLES30.GL_PIXEL_PACK_BUFFER,
+                    0,
+                    ANALYSIS_BYTES,
+                    GLES30.GL_MAP_READ_BIT
+                ) as? ByteBuffer ?: throw IllegalStateException("Falha ao mapear PBO")
+
+                val rgba = ByteArray(ANALYSIS_BYTES)
+                var unmapped = false
+
+                try {
+                    mapped.position(0)
+                    mapped.get(rgba)
+                } finally {
+                    unmapped = GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER)
+                    GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
+                }
+
+                check(unmapped) { "Dados do PBO foram invalidados" }
+
+                val gray = ByteArray(ANALYSIS_WIDTH * ANALYSIS_HEIGHT)
+                var source = 0
+
+                for (i in gray.indices) {
+                    val r = rgba[source].toInt() and 0xFF
+                    val g = rgba[source + 1].toInt() and 0xFF
+                    val b = rgba[source + 2].toInt() and 0xFF
+                    gray[i] = ((77 * r + 150 * g + 29 * b) shr 8).toByte()
+                    source += 4
+                }
+
+                val estimate = motionEstimator.estimate(gray)
+                eisCorrection = eisController.update(
+                    motionToTextureSpace(estimate)
+                )
+            }
+
+            GLES20.glBindFramebuffer(
+                GLES20.GL_FRAMEBUFFER,
+                analysisFramebuffer
+            )
+            GLES20.glViewport(0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT)
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+
+            drawFrame(
+                matrix = textureMatrix,
+                textureId = textureId,
+                correction = null
+            )
+
+            GLES30.glBindBuffer(
+                GLES30.GL_PIXEL_PACK_BUFFER,
+                analysisPbos[analysisWriteIndex]
+            )
+            GLES30.glReadPixels(
+                0,
+                0,
+                ANALYSIS_WIDTH,
+                ANALYSIS_HEIGHT,
+                GLES20.GL_RGBA,
+                GLES20.GL_UNSIGNED_BYTE,
+                0
+            )
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+
+            analysisPendingIndex = analysisWriteIndex
+            analysisWriteIndex = 1 - analysisWriteIndex
+            checkGlError("análise do quadro")
+        } finally {
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        }
+    }
+
+    private fun motionToTextureSpace(
+        estimate: ZoomixMotionEstimator.MotionEstimate?
+    ): ZoomixMotionEstimator.MotionEstimate? {
+        if (estimate == null) return null
+
+        // Parte linear da matriz 4x4, em ordem column-major.
+        val a = textureMatrix[0]
+        val b = textureMatrix[4]
+        val c = textureMatrix[1]
+        val d = textureMatrix[5]
+        val determinant = a * d - b * c
+
+        if (!determinant.isFinite() ||
+            kotlin.math.abs(determinant) < 0.000001f
+        ) {
+            Log.w(TAG, "Matriz de textura não permite converter o movimento EIS")
+            return null
+        }
+
+        // O estimador mede em pixels da imagem transformada.
+        // A inversa da matriz converte o vetor para o espaço da textura.
+        val dx = estimate.dx / ANALYSIS_WIDTH
+        val dy = estimate.dy / ANALYSIS_HEIGHT
+
+        val textureDx = ((d * dx - b * dy) / determinant) * ANALYSIS_WIDTH
+        val textureDy = ((-c * dx + a * dy) / determinant) * ANALYSIS_HEIGHT
+
+        return estimate.copy(
+            dx = textureDx,
+            dy = textureDy
+        )
+    }
+
+    private fun deleteAnalysisResources() {
+        if (analysisPbos.any { it != 0 }) {
+            GLES30.glDeleteBuffers(2, analysisPbos, 0)
+            analysisPbos.fill(0)
+        }
+        if (analysisFramebuffer != 0) {
+            GLES20.glDeleteFramebuffers(
+                1,
+                intArrayOf(analysisFramebuffer),
+                0
+            )
+            analysisFramebuffer = 0
+        }
+        if (analysisTexture != 0) {
+            GLES20.glDeleteTextures(
+                1,
+                intArrayOf(analysisTexture),
+                0
+            )
+            analysisTexture = 0
+        }
+        analysisPendingIndex = -1
+        analysisWriteIndex = 0
+        motionEstimator.reset()
+        eisCorrection = eisController.reset()
+    }
+
+    private fun checkGlError(stage: String) {
+        val error = GLES20.glGetError()
+        check(error == GLES20.GL_NO_ERROR) {
+            "Erro OpenGL em $stage: 0x${Integer.toHexString(error)}"
+        }
+    }
+
     private fun createProgram(): Int {
         val vertexShader = compileShader(
             GLES20.GL_VERTEX_SHADER,
@@ -686,11 +986,15 @@ class ZoomixSurfaceProcessor(
             attribute vec4 aPosition;
             attribute vec4 aTexCoord;
             uniform mat4 uTexMatrix;
+            uniform vec2 uEisOffset;
+            uniform float uEisScale;
             varying vec2 vTexCoord;
 
             void main() {
                 gl_Position = aPosition;
-                vTexCoord = (uTexMatrix * aTexCoord).xy;
+                vec2 centered = (aTexCoord.xy - vec2(0.5)) / uEisScale;
+                vec2 corrected = centered + vec2(0.5) - uEisOffset;
+                vTexCoord = (uTexMatrix * vec4(corrected, 0.0, 1.0)).xy;
             }
             """.trimIndent()
         )
@@ -739,12 +1043,16 @@ class ZoomixSurfaceProcessor(
             texCoordLocation = GLES20.glGetAttribLocation(id, "aTexCoord")
             transformLocation = GLES20.glGetUniformLocation(id, "uTexMatrix")
             samplerLocation = GLES20.glGetUniformLocation(id, "uTexture")
+            eisOffsetLocation = GLES20.glGetUniformLocation(id, "uEisOffset")
+            eisScaleLocation = GLES20.glGetUniformLocation(id, "uEisScale")
 
             check(
                 positionLocation >= 0 &&
                 texCoordLocation >= 0 &&
                 transformLocation >= 0 &&
-                samplerLocation >= 0
+                samplerLocation >= 0 &&
+                eisOffsetLocation >= 0 &&
+                eisScaleLocation >= 0
             ) {
                 "Shader inválido: localização de atributo ou uniforme não encontrada"
             }
@@ -835,9 +1143,10 @@ class ZoomixSurfaceProcessor(
                     display, pbuffer, pbuffer, context
                 )
 
-                if (contextCurrent && program != 0) {
-                    GLES20.glDeleteProgram(program)
-                } else if (!contextCurrent) {
+                if (contextCurrent) {
+                    deleteAnalysisResources()
+                    if (program != 0) GLES20.glDeleteProgram(program)
+                } else {
                     reportError(
                         IllegalStateException(
                             "Não foi possível ativar EGL durante a liberação."
